@@ -1,0 +1,35 @@
+[project]
+name = "mqtt-client"
+version = "0.1.0"
+description = "MQTT client application with LLM image analysis"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "paho-mqtt>=2.0.0",
+    "pydantic>=2.0.0",
+    "fastapi>=0.100.0",
+    "uvicorn>=0.22.0",
+    "pillow>=10.0.0",
+    "requests>=2.31.0",
+    "pytest>=8.4.1",
+    "pytest-asyncio>=1.0.0",
+]
+
+[build-system]
+requires = ["setuptools>=42.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+python_functions = "test_*"
+addopts = "-v --tb=short"
+
+[tool.black]
+line-length = 88
+target-version = ['py39']
+include = '\.pyi?$'
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3

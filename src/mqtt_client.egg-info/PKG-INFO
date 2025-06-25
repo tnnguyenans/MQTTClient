@@ -1,3 +1,18 @@
+Metadata-Version: 2.4
+Name: mqtt-client
+Version: 0.1.0
+Summary: MQTT client application with LLM image analysis
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+Requires-Dist: paho-mqtt>=2.0.0
+Requires-Dist: pydantic>=2.0.0
+Requires-Dist: fastapi>=0.100.0
+Requires-Dist: uvicorn>=0.22.0
+Requires-Dist: pillow>=10.0.0
+Requires-Dist: requests>=2.31.0
+Requires-Dist: pytest>=8.4.1
+Requires-Dist: pytest-asyncio>=1.0.0
+
 # MQTT Client with LLM Image Analysis
 
 A Python-based MQTT client application that subscribes to a Mosquitto MQTT broker to receive object detection data in JSON format. The application uses Large Language Models (LLM) to analyze images and extract additional attributes (color, actions, etc.) beyond basic object detection. Features a real-time web UI using producer/consumer pattern for live data updates and image display.

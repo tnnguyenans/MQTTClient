@@ -29,7 +29,7 @@ A Python-based MQTT client application that subscribes to a Mosquitto MQTT broke
   3. Create configuration management
   4. Implement basic MQTT subscriber
   5. Add JSON validation with Pydantic models
-- **Status**: [ ] Not Started
+- **Status**: [x] Completed
 
 ### Feature 2: Data Models and Validation
 - **Description**: Define Pydantic models for object detection data, including objects, bounding boxes, confidence scores, and image links
