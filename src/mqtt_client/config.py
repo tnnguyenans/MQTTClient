@@ -2,7 +2,7 @@
 
 import os
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Literal
 from pydantic import BaseModel, Field
 
 
@@ -40,6 +40,47 @@ class ImageProcessorConfig(BaseModel):
     )
 
 
+class LLMConfig(BaseModel):
+    """LLM configuration for image analysis."""
+    
+    provider: Literal["openai", "ollama"] = Field(
+        default="openai",
+        description="LLM provider (openai or ollama)"
+    )
+    api_key: Optional[str] = Field(
+        default=None,
+        description="API key for OpenAI"
+    )
+    model: str = Field(
+        default="gpt-4o",
+        description="Model to use for OpenAI or Ollama"
+    )
+    ollama_base_url: str = Field(
+        default="http://localhost:11434",
+        description="Base URL for Ollama API"
+    )
+    max_tokens: int = Field(
+        default=300,
+        description="Maximum number of tokens in response"
+    )
+    temperature: float = Field(
+        default=0.7,
+        description="Temperature for response generation (0.0-1.0)"
+    )
+    timeout: int = Field(
+        default=30,
+        description="Timeout for API requests in seconds"
+    )
+    max_retries: int = Field(
+        default=3,
+        description="Maximum number of retries for failed requests"
+    )
+    rate_limit: int = Field(
+        default=10,
+        description="Maximum number of requests per minute"
+    )
+
+
 class AppConfig(BaseModel):
     """Application configuration."""
     
@@ -47,6 +88,10 @@ class AppConfig(BaseModel):
     image_processor: ImageProcessorConfig = Field(
         default_factory=ImageProcessorConfig,
         description="Image processor configuration"
+    )
+    llm: LLMConfig = Field(
+        default_factory=LLMConfig,
+        description="LLM configuration"
     )
     debug: bool = Field(default=False, description="Enable debug mode")
 
@@ -57,8 +102,23 @@ def load_config() -> AppConfig:
     Returns:
         AppConfig: Application configuration object.
     """
-    # In a future enhancement, this could load from environment variables or config file
+    # Create default config
     config = AppConfig()
+    
+    # Load from environment variables if available
+    if os.environ.get("OPENAI_API_KEY"):
+        config.llm.api_key = os.environ.get("OPENAI_API_KEY")
+    
+    if os.environ.get("LLM_PROVIDER"):
+        provider = os.environ.get("LLM_PROVIDER").lower()
+        if provider in ["openai", "ollama"]:
+            config.llm.provider = provider
+    
+    if os.environ.get("LLM_MODEL"):
+        config.llm.model = os.environ.get("LLM_MODEL")
+    
+    if os.environ.get("OLLAMA_BASE_URL"):
+        config.llm.ollama_base_url = os.environ.get("OLLAMA_BASE_URL")
     
     # Create cache directory if it doesn't exist
     os.makedirs(config.image_processor.cache_dir, exist_ok=True)

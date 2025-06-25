@@ -82,6 +82,16 @@ uv install
 
 ## Usage
 
+### Configure ANSVIS Client with MQTT Trigger
+1. Create ANSVIS AI Task
+
+![image](https://github.com/user-attachments/assets/cf05b905-1075-4328-a5fe-0bfbc2f6ba84)
+
+2. Create Trigger for AI Task
+   
+   ![image](https://github.com/user-attachments/assets/49755ff5-ca1d-4e5b-9976-a8c870dbbd1a)
+
+
 To run the MQTT client:
 
 ```bash

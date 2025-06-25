@@ -1,0 +1,30 @@
+{
+  "timestamp": "2025-06-25T14:47:15+10:00",
+  "source": "test_camera",
+  "objects": [
+    {
+      "id": "obj1",
+      "label": "person",
+      "confidence": 0.95,
+      "bounding_box": {
+        "x": 100,
+        "y": 100,
+        "width": 200,
+        "height": 300
+      }
+    },
+    {
+      "id": "obj2",
+      "label": "car",
+      "confidence": 0.85,
+      "bounding_box": {
+        "x": 400,
+        "y": 200,
+        "width": 300,
+        "height": 200
+      }
+    }
+  ],
+  "image_url": "https://example.com/image.jpg",
+  "additional_image_urls": []
+}

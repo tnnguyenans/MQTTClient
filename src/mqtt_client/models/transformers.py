@@ -24,21 +24,50 @@ def extract_bounding_boxes(
     """
     boxes = []
     
-    for rule in event_data.Detections:
-        for detection_data in rule.DetectionData:
-            for detection in detection_data.Detections:
-                bbox = detection.BoundingBox
-                boxes.append({
-                    'license_plate': detection_data.Name,
-                    'confidence': detection.Score,
-                    'timestamp': detection.Time,
-                    'left': bbox.Left,
-                    'top': bbox.Top,
-                    'right': bbox.Right,
-                    'bottom': bbox.Bottom,
-                    'camera_id': detection_data.CameraID,
-                    'camera_name': detection_data.CameraName
-                })
+    # Check if Detections is present and not empty
+    if not event_data.Detections:
+        logger.warning("No Detections found in ALPR event data")
+        return boxes
+    
+    try:
+        for rule in event_data.Detections:
+            # Check if DetectionData is present and not empty
+            if not rule.DetectionData:
+                logger.warning("No DetectionData found in rule")
+                continue
+                
+            for detection_data in rule.DetectionData:
+                # Check if Detections is present and not empty
+                if not detection_data.Detections:
+                    logger.warning(f"No Detections found in detection data {detection_data.Name}")
+                    continue
+                    
+                for detection in detection_data.Detections:
+                    # Check if BoundingBox is present
+                    if not hasattr(detection, 'BoundingBox') or not detection.BoundingBox:
+                        logger.warning(f"No BoundingBox found in detection for {detection_data.Name}")
+                        continue
+                        
+                    bbox = detection.BoundingBox
+                    
+                    # Convert bounding box to the format expected by the analyzer
+                    box_info = {
+                        'license_plate': detection_data.Name,
+                        'confidence': detection.Score,
+                        'timestamp': detection.Time,
+                        'bounding_box': {
+                            'x': bbox.Left,
+                            'y': bbox.Top,
+                            'width': bbox.Right - bbox.Left,
+                            'height': bbox.Bottom - bbox.Top
+                        },
+                        'camera_id': detection_data.CameraID,
+                        'camera_name': detection_data.CameraName
+                    }
+                    
+                    boxes.append(box_info)
+    except Exception as e:
+        logger.error(f"Error extracting bounding boxes: {e}")
     
     return boxes
 

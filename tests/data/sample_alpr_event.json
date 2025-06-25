@@ -1,0 +1,47 @@
+{
+  "EventName": "ALPR LLM Task",
+  "CameraID": 1973760043,
+  "CameraName": "ALPR Day",
+  "Detections": [
+    {
+      "RuleType": "Presence",
+      "DetectionData": [
+        {
+          "Name": "59A344886",
+          "ModelClassID": {"ModelID": 4294967294, "Class": 1},
+          "ModelClassName": {"Model": "B-IN_License Plate Recognition v1.0", "Class": ""},
+          "DeploymentGroupID": 1973760195,
+          "DeploymentGroupName": "ALPR LLM Task",
+          "CameraID": 1973760043,
+          "CameraName": "ALPR Day",
+          "CameraAddress": "2025-05-12_02-43-24_PMH_ngay.mp4",
+          "TrackID": 1,
+          "Detections": [
+            {
+              "Time": "2025-06-25T02:24:06.288Z",
+              "BoundingBox": {"Left": 683, "Top": 611, "Right": 727, "Bottom": 643},
+              "Score": 0.836019754,
+              "Image": 284931,
+              "ModelClassID": {"ModelID": 4294967294, "Class": 1},
+              "ModelClassName": {"Model": "B-IN_License Plate Recognition v1.0", "Class": "59A344886"},
+              "ExtraInformation": "",
+              "Attributes": []
+            }
+          ],
+          "Result": "",
+          "ExtraVisionResult": "",
+          "TriggeredGroup": "",
+          "UserInfo": {"UserID": "", "UserName": "", "GroupIDs": [], "GroupNames": []}
+        }
+      ],
+      "PipelineOption": "ALPR pipeline"
+    }
+  ],
+  "Images": [
+    {
+      "ID": 284931,
+      "Image": "https://anspushnotification.s3.ap-southeast-2.amazonaws.com/aiboxevents/20250625_122406_1973760195_798",
+      "ScaledFactor": 1
+    }
+  ]
+}

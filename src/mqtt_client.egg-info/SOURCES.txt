@@ -3,6 +3,8 @@ pyproject.toml
 src/mqtt_client/__init__.py
 src/mqtt_client/config.py
 src/mqtt_client/main.py
+src/mqtt_client/main_fixed.py
+src/mqtt_client/main_new.py
 src/mqtt_client.egg-info/PKG-INFO
 src/mqtt_client.egg-info/SOURCES.txt
 src/mqtt_client.egg-info/dependency_links.txt
@@ -13,8 +15,12 @@ src/mqtt_client/examples/alpr_test.py
 src/mqtt_client/examples/image_processor_test.py
 src/mqtt_client/examples/mqtt_test.py
 src/mqtt_client/examples/queue_manager_test.py
+src/mqtt_client/llm/__init__.py
+src/mqtt_client/llm/analyzer.py
+src/mqtt_client/llm/queue.py
 src/mqtt_client/models/__init__.py
 src/mqtt_client/models/alpr_detection.py
+src/mqtt_client/models/analysis.py
 src/mqtt_client/models/detection.py
 src/mqtt_client/models/transformers.py
 src/mqtt_client/models/validation.py
@@ -24,6 +30,10 @@ src/mqtt_client/processors/__init__.py
 src/mqtt_client/processors/image.py
 src/mqtt_client/processors/queue_manager.py
 tests/test_image_processor.py
+tests/test_llm_fixed.py
+tests/test_llm_integration.py
+tests/test_llm_simple.py
+tests/test_llm_with_local_images.py
 tests/test_mqtt.py
 tests/test_queue_manager.py
 tests/test_transformers.py

@@ -26,6 +26,57 @@ from mqtt_client.models.alpr_detection import ALPREventData, ImageInfoModel
 logger = logging.getLogger(__name__)
 
 
+def truncate_url_for_logging(url: str, max_length: int = 30) -> str:
+    """Truncate URL for logging to avoid cluttering logs.
+    
+    Args:
+        url: URL to truncate.
+        max_length: Maximum length of the truncated URL.
+        
+    Returns:
+        Truncated URL.
+    """
+    if not url:
+        return ""
+    
+    if len(url) <= max_length:
+        return url
+    
+    # Keep the protocol and domain, truncate the rest
+    parts = url.split("/", 3)
+    if len(parts) >= 4:
+        return f"{parts[0]}//{parts[2]}/...{url[-10:]}"
+    
+    # Simple truncation if URL doesn't have expected format
+    return f"{url[:max_length]}..."
+
+
+def truncate_base64_for_logging(data: str, max_length: int = 30) -> str:
+    """Truncate base64 data for logging to avoid cluttering logs.
+    
+    Args:
+        data: Base64 data to truncate.
+        max_length: Maximum length of the truncated data.
+        
+    Returns:
+        Truncated base64 data.
+    """
+    if not data:
+        return ""
+    
+    if len(data) <= max_length:
+        return data
+    
+    # Handle data URI format
+    if data.startswith('data:'):
+        parts = data.split(',', 1)
+        if len(parts) == 2:
+            return f"{parts[0]},{parts[1][:10]}...{parts[1][-5:]}"
+    
+    # Simple truncation for regular base64 data
+    return f"{data[:10]}...{data[-5:]}"
+
+
 class ImageProcessor:
     """Image processor for downloading, caching, and processing images from URLs or base64 strings."""
     
@@ -219,11 +270,11 @@ class ImageProcessor:
             # Update cache metadata
             self._update_cache_metadata(url, cache_path)
             
-            logger.info(f"Generated placeholder image for {url} -> {cache_path}")
+            logger.info(f"Generated placeholder image for {truncate_url_for_logging(url)} -> {cache_path}")
             return cache_path
             
         except Exception as e:
-            logger.error(f"Failed to generate placeholder image for {url}: {e}")
+            logger.error(f"Failed to generate placeholder image for {truncate_url_for_logging(url)}: {e}")
             return None
     
     async def process_base64_image(self, base64_str: str) -> Optional[str]:
@@ -238,7 +289,7 @@ class ImageProcessor:
         # Check if image is already cached
         if self._is_cached(base64_str):
             cache_path = self._get_cache_path(base64_str)
-            logger.debug(f"Base64 image already cached: {cache_path}")
+            logger.debug(f"Base64 image already cached: {truncate_base64_for_logging(base64_str)} -> {cache_path}")
             
             # Update last accessed time
             if base64_str in self._cache_metadata:
@@ -281,7 +332,7 @@ class ImageProcessor:
             # Clean cache if needed
             await self._clean_cache()
             
-            logger.debug(f"Processed base64 image -> {cache_path}")
+            logger.debug(f"Processed base64 image: {truncate_base64_for_logging(base64_str)} -> {cache_path}")
             return cache_path
             
         except base64.binascii.Error as e:
@@ -305,19 +356,19 @@ class ImageProcessor:
         """
         # Validate URL
         if not url or not isinstance(url, str):
-            logger.error(f"Invalid URL: {url}")
+            logger.error(f"Invalid URL: {truncate_url_for_logging(url)}")
             return None
             
         # Normalize URL
         url = url.strip()
         if not url.startswith(('http://', 'https://')):
-            logger.error(f"URL must start with http:// or https://: {url}")
+            logger.error(f"URL must start with http:// or https://: {truncate_url_for_logging(url)}")
             return None
             
         # Check if image is already cached
         if self._is_cached(url):
             cache_path = self._get_cache_path(url)
-            logger.debug(f"Image already cached: {url} -> {cache_path}")
+            logger.debug(f"Image already cached: {truncate_url_for_logging(url)} -> {cache_path}")
             
             # Update last accessed time
             if url in self._cache_metadata:
@@ -349,11 +400,11 @@ class ImageProcessor:
             
             async with session.get(url, headers=headers, timeout=timeout, ssl=False) as response:
                 if response.status != 200:
-                    logger.error(f"Failed to download image {url}: HTTP {response.status}")
+                    logger.error(f"Failed to download image {truncate_url_for_logging(url)}: HTTP {response.status}")
                     
                     # For 403 errors (common with S3), generate a placeholder image for testing
                     if response.status == 403 and 's3.' in url.lower():
-                        logger.info(f"Using placeholder image for S3 URL: {url}")
+                        logger.info(f"Using placeholder image for S3 URL: {truncate_url_for_logging(url)}")
                         return await self._generate_placeholder_image(url)
                     
                     return None
@@ -361,7 +412,7 @@ class ImageProcessor:
                 # Check content type
                 content_type = response.headers.get('Content-Type', '')
                 if not content_type.startswith('image/') and 'octet-stream' not in content_type.lower():
-                    logger.warning(f"URL {url} might not be an image (Content-Type: {content_type}), but trying anyway")
+                    logger.warning(f"URL {truncate_url_for_logging(url)} might not be an image (Content-Type: {content_type}), but trying anyway")
                 
                 # Save image to cache
                 async with aiofiles.open(cache_path, 'wb') as f:
@@ -369,14 +420,14 @@ class ImageProcessor:
                 
                 # Validate the downloaded file is actually an image
                 if not self.validate_image(cache_path):
-                    logger.error(f"Downloaded file is not a valid image: {url}")
+                    logger.error(f"Downloaded file is not a valid image: {truncate_url_for_logging(url)}")
                     try:
                         os.remove(cache_path)  # Clean up invalid file
                     except OSError:
                         pass
                         
                     # Generate a placeholder image instead
-                    logger.info(f"Using placeholder image for invalid image: {url}")
+                    logger.info(f"Using placeholder image for invalid image: {truncate_url_for_logging(url)}")
                     return await self._generate_placeholder_image(url)
                 
                 # Update cache metadata
@@ -385,24 +436,24 @@ class ImageProcessor:
                 # Clean cache if needed
                 await self._clean_cache()
                 
-                logger.debug(f"Downloaded image: {url} -> {cache_path}")
+                logger.debug(f"Downloaded image: {truncate_url_for_logging(url)} -> {cache_path}")
                 return cache_path
                 
         except aiohttp.ClientError as e:
-            logger.error(f"Failed to download image {url}: {e}")
+            logger.error(f"Failed to download image {truncate_url_for_logging(url)}: {e}")
             # Generate a placeholder image for network errors
-            logger.info(f"Using placeholder image for network error: {url}")
+            logger.info(f"Using placeholder image for network error: {truncate_url_for_logging(url)}")
             return await self._generate_placeholder_image(url)
         except asyncio.TimeoutError:
-            logger.error(f"Timeout downloading image {url}")
+            logger.error(f"Timeout downloading image {truncate_url_for_logging(url)}")
             # Generate a placeholder image for timeout errors
-            logger.info(f"Using placeholder image for timeout: {url}")
+            logger.info(f"Using placeholder image for timeout: {truncate_url_for_logging(url)}")
             return await self._generate_placeholder_image(url)
         except OSError as e:
-            logger.error(f"Failed to save image {url} to {cache_path}: {e}")
+            logger.error(f"Failed to save image {truncate_url_for_logging(url)} to {cache_path}: {e}")
             return await self._generate_placeholder_image(url)
         except Exception as e:
-            logger.error(f"Unexpected error downloading image {url}: {e}")
+            logger.error(f"Unexpected error downloading image {truncate_url_for_logging(url)}: {e}")
             return await self._generate_placeholder_image(url)
     
     async def download_images(self, image_sources: List[str]) -> Dict[str, Optional[str]]:
