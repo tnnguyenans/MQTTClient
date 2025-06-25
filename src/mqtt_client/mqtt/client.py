@@ -10,6 +10,8 @@ from pydantic import ValidationError
 from mqtt_client.config import MQTTConfig
 from mqtt_client.models.detection import DetectionData
 from mqtt_client.models.alpr_detection import ALPREventData
+from mqtt_client.models.validation import detect_and_validate_data, transform_datetime_fields
+from mqtt_client.models.transformers import normalize_confidence_scores
 
 # Configure logging
 logging.basicConfig(
@@ -108,43 +110,29 @@ class MQTTClient:
             # Parse JSON payload
             payload = json.loads(msg.payload.decode('utf-8'))
             
-            # Try to determine the data format and validate with appropriate Pydantic model
-            try:
-                # First try to parse as ALPR event data
-                if "EventName" in payload and "CameraID" in payload and "Detections" in payload:
-                    event_data = ALPREventData.parse_obj(payload)
-                    logger.info("Received ALPR event data")
-                    
-                    # Call user-provided callback if set
-                    if self._message_callback:
-                        self._message_callback(event_data)
-                else:
-                    # Fall back to generic detection data format
-                    detection_data = DetectionData.parse_obj(payload)
-                    logger.info("Received generic detection data")
-                    
-                    # Call user-provided callback if set
-                    if self._message_callback:
-                        self._message_callback(detection_data)
-            except ValidationError as e:
-                logger.error(f"Invalid data format: {e}")
-                # Try the other format as a fallback
-                try:
-                    if "EventName" in payload:
-                        detection_data = DetectionData.parse_obj(payload)
-                    else:
-                        event_data = ALPREventData.parse_obj(payload)
-                        
-                    # Call user-provided callback if set
-                    if self._message_callback:
-                        if "EventName" in payload:
-                            self._message_callback(detection_data)
-                        else:
-                            self._message_callback(event_data)
-                except ValidationError:
-                    # Both formats failed, re-raise the original error
-                    logger.error("Failed to parse message with both data models")
-                    raise
+            # Pre-process datetime fields
+            processed_payload = transform_datetime_fields(payload)
+            
+            # Validate data using our validation utility
+            validation_result = detect_and_validate_data(processed_payload)
+            
+            if validation_result.is_valid and validation_result.model:
+                # Log success
+                logger.info(f"Received valid {validation_result.model_type} data")
+                
+                # Normalize confidence scores if needed
+                normalized_data = normalize_confidence_scores(validation_result.model)
+                
+                # Call user-provided callback if set
+                if self._message_callback:
+                    self._message_callback(normalized_data)
+            else:
+                # Log validation errors
+                error_details = "\n".join([f"- {e['location']}: {e['message']}" for e in validation_result.errors])
+                logger.error(f"Validation failed for message:\n{error_details}")
+                
+                # We don't raise an exception here to keep the client running
+                # but we log the error for debugging purposes
                 
         except json.JSONDecodeError as e:
             logger.error(f"Failed to decode JSON payload: {e}")
