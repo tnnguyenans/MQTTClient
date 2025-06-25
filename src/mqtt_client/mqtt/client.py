@@ -48,14 +48,20 @@ class MQTTClient:
         # Message callback handler
         self._message_callback: Optional[Callable[[Union[DetectionData, ALPREventData]], None]] = None
         
-    def connect(self) -> None:
-        """Connect to MQTT broker."""
+    def connect(self) -> bool:
+        """Connect to MQTT broker.
+        
+        Returns:
+            bool: True if connection was successful, False otherwise.
+        """
         try:
             logger.info(f"Connecting to MQTT broker at {self.config.broker_host}:{self.config.broker_port}")
             self.client.connect(self.config.broker_host, self.config.broker_port)
+            return True
         except Exception as e:
-            logger.error(f"Failed to connect to MQTT broker: {e}")
-            raise
+            logger.warning(f"Failed to connect to MQTT broker: {e}")
+            logger.warning("Application will continue without MQTT functionality")
+            return False
     
     def disconnect(self) -> None:
         """Disconnect from MQTT broker."""

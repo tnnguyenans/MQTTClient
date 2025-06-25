@@ -291,8 +291,8 @@ class LLMAnalyzer:
             base64_image = self._encode_image_to_base64(image_path)
             
             # Prepare request payload
-            # Ensure we're using a valid vision model
-            vision_model = "gpt-4o"  # Latest model with vision capabilities
+            # Use the configured model or fall back to a default
+            vision_model = self.config.model  # Use the configured model from settings
             logger.info(f"Using OpenAI vision model: {vision_model}")
             
             # Prepare payload for vision API

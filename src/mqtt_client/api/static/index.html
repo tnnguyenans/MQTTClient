@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MQTT Client Dashboard</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>MQTT Client with LLM Image Analysis</h1>
+            <div class="navigation-wrapper">
+                <div class="navigation">
+                    <a href="/" class="nav-link active">Dashboard</a>
+                    <a href="/analytics.html" class="nav-link">Analytics</a>
+                </div>
+                <div class="connection-status">
+                    <span class="status-indicator status-offline"></span>
+                    <span class="status-text">Disconnected</span>
+                </div>
+            </div>
+        </header>
+
+        <div class="dashboard">
+            <div class="sidebar">
+                <div class="sidebar-header">
+                    <h2>Detection Events</h2>
+                    <button id="refresh-btn" title="Refresh detection history">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M23 4v6h-6"></path>
+                            <path d="M1 20v-6h6"></path>
+                            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                        </svg>
+                    </button>
+                </div>
+                <div id="event-list" class="event-list"></div>
+            </div>
+            <div class="main-content">
+                <div class="image-container">
+                    <h2>Detection Image</h2>
+                    <div id="image-viewer">
+                        <div class="placeholder-image">No image selected</div>
+                    </div>
+                </div>
+                <div class="detection-details">
+                    <h2>Detection Details</h2>
+                    <div id="detection-info">
+                        <p class="no-data">No detection selected</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="analysis-section" class="analysis-section">
+            <h2>LLM Analysis</h2>
+            <p class="no-data">No analysis available</p>
+        </div>
+        
+        <footer>
+            <p>MQTT Client with FastAPI and WebSocket © 2025</p>
+        </footer>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

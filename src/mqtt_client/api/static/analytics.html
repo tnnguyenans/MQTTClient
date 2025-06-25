@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MQTT Client Analytics</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.7.1/dist/chart.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>MQTT Client Analytics</h1>
+            <div class="navigation-wrapper">
+                <div class="navigation">
+                    <a href="/" class="nav-link">Dashboard</a>
+                    <a href="/analytics.html" class="nav-link active">Analytics</a>
+                </div>
+                <div class="connection-status">
+                    <span class="status-indicator status-offline"></span>
+                    <span class="status-text">Disconnected</span>
+                </div>
+            </div>
+        </header>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-value" id="total-detections">0</div>
+                <div class="stat-label">Total Detections</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="unique-sources">0</div>
+                <div class="stat-label">Unique Sources</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="objects-detected">0</div>
+                <div class="stat-label">Objects Detected</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="avg-confidence">0%</div>
+                <div class="stat-label">Average Confidence</div>
+            </div>
+        </div>
+
+        <div class="chart-section">
+            <h2>Detection Timeline</h2>
+            <div class="chart-container">
+                <canvas id="timeline-chart"></canvas>
+            </div>
+        </div>
+
+        <div class="chart-section">
+            <h2>Object Classes Distribution</h2>
+            <div class="chart-container">
+                <canvas id="objects-chart"></canvas>
+            </div>
+        </div>
+
+        <div class="chart-section">
+            <h2>Source Distribution</h2>
+            <div class="chart-container">
+                <canvas id="sources-chart"></canvas>
+            </div>
+        </div>
+
+        <footer>
+            <p>MQTT Client with FastAPI and WebSocket © 2025</p>
+        </footer>
+    </div>
+
+    <script src="/static/analytics.js"></script>
+</body>
+</html>

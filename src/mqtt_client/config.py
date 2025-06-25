@@ -2,8 +2,9 @@
 
 import os
 from pathlib import Path
-from typing import Optional, Tuple, Literal
+from typing import Optional, Tuple, Literal, List
 from pydantic import BaseModel, Field
+from dotenv import load_dotenv
 
 
 class MQTTConfig(BaseModel):
@@ -81,9 +82,35 @@ class LLMConfig(BaseModel):
     )
 
 
+class APIConfig(BaseModel):
+    """API configuration."""
+    
+    host: str = Field(
+        default="0.0.0.0",
+        description="Host address for the API server"
+    )
+    port: int = Field(
+        default=8000,
+        description="Port for the API server"
+    )
+    cors_origins: List[str] = Field(
+        default=["*"],
+        description="List of allowed CORS origins"
+    )
+    debug: bool = Field(
+        default=False,
+        description="Enable debug mode for API"
+    )
+    max_history_size: int = Field(
+        default=100,
+        description="Maximum number of detection events to keep in history"
+    )
+
+
 class AppConfig(BaseModel):
     """Application configuration."""
     
+    version: str = Field(default="1.0.0", description="Application version")
     mqtt: MQTTConfig = Field(default_factory=MQTTConfig, description="MQTT configuration")
     image_processor: ImageProcessorConfig = Field(
         default_factory=ImageProcessorConfig,
@@ -92,6 +119,10 @@ class AppConfig(BaseModel):
     llm: LLMConfig = Field(
         default_factory=LLMConfig,
         description="LLM configuration"
+    )
+    api: APIConfig = Field(
+        default_factory=APIConfig,
+        description="API configuration"
     )
     debug: bool = Field(default=False, description="Enable debug mode")
 
@@ -102,10 +133,22 @@ def load_config() -> AppConfig:
     Returns:
         AppConfig: Application configuration object.
     """
+    # Load .env file from different possible locations
+    for env_path in [
+        os.path.join(os.getcwd(), '.env'),
+        os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.env'),
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'),
+    ]:
+        if os.path.exists(env_path):
+            load_dotenv(env_path)
+            print(f"Loaded environment variables from {env_path}")
+            break
+    
     # Create default config
     config = AppConfig()
     
     # Load from environment variables if available
+    # LLM configuration
     if os.environ.get("OPENAI_API_KEY"):
         config.llm.api_key = os.environ.get("OPENAI_API_KEY")
     
@@ -119,6 +162,16 @@ def load_config() -> AppConfig:
     
     if os.environ.get("OLLAMA_BASE_URL"):
         config.llm.ollama_base_url = os.environ.get("OLLAMA_BASE_URL")
+    
+    # API configuration
+    if os.environ.get("API_HOST"):
+        config.api.host = os.environ.get("API_HOST")
+    
+    if os.environ.get("API_PORT") and os.environ.get("API_PORT").isdigit():
+        config.api.port = int(os.environ.get("API_PORT"))
+    
+    if os.environ.get("API_DEBUG") and os.environ.get("API_DEBUG").lower() in ["true", "1", "yes"]:
+        config.api.debug = True
     
     # Create cache directory if it doesn't exist
     os.makedirs(config.image_processor.cache_dir, exist_ok=True)
