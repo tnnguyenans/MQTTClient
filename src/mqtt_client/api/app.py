@@ -61,6 +61,11 @@ def create_app() -> FastAPI:
         """Serve the index.html file."""
         return FileResponse(os.path.join(static_dir, "index.html"))
     
+    @app.get("/index.html")
+    async def serve_index_html():
+        """Serve the index.html file explicitly."""
+        return FileResponse(os.path.join(static_dir, "index.html"))
+    
     @app.get("/analytics.html")
     async def serve_analytics():
         """Serve the analytics.html file."""

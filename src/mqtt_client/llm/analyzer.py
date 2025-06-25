@@ -504,7 +504,9 @@ class LLMAnalyzer:
             
             # Parse analysis result
             try:
-                # Try to extract JSON from the response
+                # Try multiple approaches to extract JSON from the response
+                analysis = None
+                
                 # First, try direct JSON parsing
                 try:
                     analysis = json.loads(analysis_text)
@@ -513,16 +515,50 @@ class LLMAnalyzer:
                     import re
                     json_match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', analysis_text)
                     if json_match:
-                        analysis = json.loads(json_match.group(1))
-                    else:
-                        # If that fails too, create a simple analysis
-                        logger.warning(f"Could not parse JSON from LLM response, using text as description")
-                        analysis = {
-                            "description": analysis_text[:100],  # Truncate long text
-                            "colors": [],
-                            "actions": [],
-                            "attributes": []
-                        }
+                        try:
+                            analysis = json.loads(json_match.group(1))
+                        except json.JSONDecodeError:
+                            logger.warning(f"Failed to parse JSON from code block")
+                    
+                    # If that fails, try to find JSON-like structure with { }
+                    if not analysis:
+                        json_match = re.search(r'\{[\s\S]*?\}', analysis_text)
+                        if json_match:
+                            try:
+                                # Clean up the extracted text - replace single quotes with double quotes
+                                # and ensure property names are properly quoted
+                                json_str = json_match.group(0)
+                                # Replace unquoted property names with quoted ones
+                                json_str = re.sub(r'([{,])\s*(\w+)\s*:', r'\1"\2":', json_str)
+                                # Replace single quotes with double quotes
+                                json_str = json_str.replace("'", '"')
+                                analysis = json.loads(json_str)
+                            except json.JSONDecodeError:
+                                logger.warning(f"Failed to parse JSON from extracted structure")
+                
+                # If all parsing attempts fail, create a simple analysis from the text
+                if not analysis:
+                    logger.warning(f"Could not parse JSON from LLM response, using text as description")
+                    # Extract key information using regex patterns
+                    colors_match = re.search(r'[Cc]olors?[:\s]+(.*?)(?:\n|$)', analysis_text)
+                    actions_match = re.search(r'[Aa]ctions?[:\s]+(.*?)(?:\n|$)', analysis_text)
+                    desc_match = re.search(r'[Dd]escription[:\s]+(.*?)(?:\n|$)', analysis_text)
+                    
+                    colors = colors_match.group(1).strip() if colors_match else ""
+                    actions = actions_match.group(1).strip() if actions_match else ""
+                    description = desc_match.group(1).strip() if desc_match else analysis_text[:100]
+                    
+                    analysis = {
+                        "description": description,
+                        "colors": [colors] if colors else [],
+                        "actions": [actions] if actions else [],
+                        "attributes": []
+                    }
+                
+                # Ensure all expected keys exist
+                for key in ["colors", "actions", "description", "attributes"]:
+                    if key not in analysis:
+                        analysis[key] = [] if key != "description" else ""
                 
                 # Update object info with analysis
                 object_info["llm_analysis"] = analysis

@@ -50,8 +50,11 @@ function cacheElements() {
 // Initialize WebSocket connection
 function initWebSocket() {
     const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
-    const wsUrl = `${protocol}${window.location.host}/ws`;
+    // Use explicit port 8088 instead of relying on window.location.host
+    const host = window.location.hostname;
+    const wsUrl = `${protocol}${host}:8088/ws`;
     
+    console.log(`Attempting to connect to WebSocket at: ${wsUrl}`);
     updateConnectionStatus('connecting');
     
     state.websocket = new WebSocket(wsUrl);
@@ -103,6 +106,7 @@ function handleWebSocketClose() {
 // Handle WebSocket error
 function handleWebSocketError(error) {
     console.error('WebSocket error:', error);
+    console.error('WebSocket error details:', JSON.stringify(error));
     updateConnectionStatus('offline');
 }
 
@@ -139,13 +143,26 @@ function updateConnectionStatus(status) {
 // Load detection history from the API
 async function loadDetectionHistory() {
     try {
+        console.log('Loading detection history...');
         const response = await fetch('/detections?limit=50');
         if (!response.ok) {
             throw new Error(`HTTP error! Status: ${response.status}`);
         }
         
         const data = await response.json();
-        state.detections = data.items;
+        console.log('Received detection history:', data);
+        
+        // Check if data is an array directly or has an items property
+        if (Array.isArray(data)) {
+            state.detections = data;
+        } else if (data.items && Array.isArray(data.items)) {
+            state.detections = data.items;
+        } else {
+            state.detections = [];
+            console.warn('Unexpected data format for detections:', data);
+        }
+        
+        console.log(`Loaded ${state.detections.length} detections`);
         
         // Update the UI with the detection history
         renderDetectionList();
