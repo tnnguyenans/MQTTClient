@@ -1,8 +1,8 @@
 """ALPR (Automatic License Plate Recognition) data models."""
 
-from typing import List, Any
+from typing import List, Any, Union
 from datetime import datetime
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, Field, HttpUrl, validator
 
 
 class ModelClassIDModel(BaseModel):
@@ -78,11 +78,33 @@ class RuleModel(BaseModel):
 
 
 class ImageInfoModel(BaseModel):
-    """Image information."""
+    """Image information.
+    
+    The Image field can be either a URL or a base64 encoded string.
+    """
     
     ID: int = Field(..., description="Image identifier")
-    Image: HttpUrl = Field(..., description="Image URL")
+    Image: str = Field(..., description="Image URL or base64 encoded string")
     ScaledFactor: float = Field(default=1.0, description="Image scaling factor")
+    
+    @validator('Image')
+    def validate_image(cls, v):
+        """Validate image field as either URL or base64.
+        
+        Args:
+            v: Image field value.
+            
+        Returns:
+            str: Validated image field value.
+        """
+        # If it starts with http:// or https://, validate as URL
+        if v.startswith(('http://', 'https://')):
+            # We're not using HttpUrl validator directly to avoid the 2083 character limit
+            # Just do basic validation
+            if not '://' in v:
+                raise ValueError('URL must contain scheme (http:// or https://)')
+        # Otherwise, assume it's a base64 string (will be validated during processing)
+        return v
 
 
 class ALPREventData(BaseModel):

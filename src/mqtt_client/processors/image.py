@@ -6,7 +6,9 @@ import hashlib
 import asyncio
 import io
 import random
-from typing import Optional, List, Dict, Tuple, Union
+import base64
+import re
+from typing import Optional, List, Dict, Tuple, Union, Literal
 from datetime import datetime
 from pathlib import Path
 import tempfile
@@ -25,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 
 class ImageProcessor:
-    """Image processor for downloading, caching, and processing images."""
+    """Image processor for downloading, caching, and processing images from URLs or base64 strings."""
     
     def __init__(self, cache_dir: Optional[str] = None, max_cache_size_mb: int = 500):
         """Initialize image processor.
@@ -65,39 +67,49 @@ class ImageProcessor:
             await self._session.close()
             self._session = None
     
-    def _get_cache_path(self, url: str) -> str:
-        """Get cache file path for a URL.
+    def _get_cache_path(self, image_source: str) -> str:
+        """Get cache file path for an image source (URL or base64).
         
         Args:
-            url: Image URL.
+            image_source: Image URL or base64 string.
             
         Returns:
             str: Cache file path.
         """
-        # Create a hash of the URL to use as filename
-        url_hash = hashlib.md5(url.encode()).hexdigest()
+        # Create a hash of the image source to use as filename
+        source_hash = hashlib.md5(image_source.encode()).hexdigest()
         
-        # Extract file extension from URL
-        path = Path(url)
-        extension = path.suffix.lower() or ".jpg"  # Default to .jpg if no extension
+        # Determine extension
+        if image_source.startswith(('http://', 'https://')):
+            # Extract file extension from URL
+            path = Path(image_source)
+            extension = path.suffix.lower() or ".jpg"  # Default to .jpg if no extension
+        else:
+            # For base64, try to extract format from data URI or default to .jpg
+            extension = ".jpg"
+            if image_source.startswith('data:image/'):
+                # Extract format from data URI
+                match = re.match(r'data:image/([a-zA-Z0-9]+);base64,', image_source)
+                if match:
+                    extension = f".{match.group(1)}"
         
         # Ensure extension starts with a dot
         if not extension.startswith("."):
             extension = f".{extension}"
         
         # Create cache file path
-        return os.path.join(self.cache_dir, f"{url_hash}{extension}")
+        return os.path.join(self.cache_dir, f"{source_hash}{extension}")
     
-    def _is_cached(self, url: str) -> bool:
+    def _is_cached(self, image_source: str) -> bool:
         """Check if image is cached.
         
         Args:
-            url: Image URL.
+            image_source: Image URL or base64 string.
             
         Returns:
             bool: True if image is cached, False otherwise.
         """
-        cache_path = self._get_cache_path(url)
+        cache_path = self._get_cache_path(image_source)
         return os.path.exists(cache_path)
     
     def _update_cache_metadata(self, url: str, file_path: str) -> None:
@@ -214,11 +226,79 @@ class ImageProcessor:
             logger.error(f"Failed to generate placeholder image for {url}: {e}")
             return None
     
+    async def process_base64_image(self, base64_str: str) -> Optional[str]:
+        """Process a base64 encoded image and cache it.
+        
+        Args:
+            base64_str: Base64 encoded image string.
+            
+        Returns:
+            Optional[str]: Path to cached image file, or None if processing failed.
+        """
+        # Check if image is already cached
+        if self._is_cached(base64_str):
+            cache_path = self._get_cache_path(base64_str)
+            logger.debug(f"Base64 image already cached: {cache_path}")
+            
+            # Update last accessed time
+            if base64_str in self._cache_metadata:
+                self._cache_metadata[base64_str]['last_accessed'] = datetime.now()
+            else:
+                self._update_cache_metadata(base64_str, cache_path)
+            
+            return cache_path
+        
+        # Process base64 image
+        cache_path = self._get_cache_path(base64_str)
+        
+        try:
+            # Extract the actual base64 content if it's a data URI
+            if base64_str.startswith('data:'):
+                # Format: data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/...
+                base64_content = base64_str.split(',', 1)[1]
+            else:
+                base64_content = base64_str
+            
+            # Decode base64 string
+            image_data = base64.b64decode(base64_content)
+            
+            # Save image to cache
+            async with aiofiles.open(cache_path, 'wb') as f:
+                await f.write(image_data)
+            
+            # Validate the image
+            if not self.validate_image(cache_path):
+                logger.error(f"Invalid base64 image data")
+                try:
+                    os.remove(cache_path)  # Clean up invalid file
+                except OSError:
+                    pass
+                return await self._generate_placeholder_image("invalid_base64_image")
+            
+            # Update cache metadata
+            self._update_cache_metadata(base64_str, cache_path)
+            
+            # Clean cache if needed
+            await self._clean_cache()
+            
+            logger.debug(f"Processed base64 image -> {cache_path}")
+            return cache_path
+            
+        except base64.binascii.Error as e:
+            logger.error(f"Failed to decode base64 image: {e}")
+            return await self._generate_placeholder_image("invalid_base64_image")
+        except OSError as e:
+            logger.error(f"Failed to save base64 image to {cache_path}: {e}")
+            return await self._generate_placeholder_image("invalid_base64_image")
+        except Exception as e:
+            logger.error(f"Unexpected error processing base64 image: {e}")
+            return await self._generate_placeholder_image("invalid_base64_image")
+    
     async def download_image(self, url: str) -> Optional[str]:
         """Download image from URL and cache it.
         
         Args:
-            url: Image URL.
+            url: Image URL or base64 string.
             
         Returns:
             Optional[str]: Path to cached image file, or None if download failed.
@@ -325,18 +405,18 @@ class ImageProcessor:
             logger.error(f"Unexpected error downloading image {url}: {e}")
             return await self._generate_placeholder_image(url)
     
-    async def download_images(self, urls: List[str]) -> Dict[str, Optional[str]]:
-        """Download multiple images.
+    async def download_images(self, image_sources: List[str]) -> Dict[str, Optional[str]]:
+        """Download or process multiple images.
         
         Args:
-            urls: List of image URLs.
+            image_sources: List of image URLs or base64 strings.
             
         Returns:
-            Dict[str, Optional[str]]: Dictionary mapping URLs to cache file paths.
+            Dict[str, Optional[str]]: Dictionary mapping image sources to cache file paths.
         """
-        tasks = [self.download_image(url) for url in urls]
+        tasks = [self.get_image(source) for source in image_sources]
         results = await asyncio.gather(*tasks)
-        return {url: result for url, result in zip(urls, results)}
+        return {source: result for source, result in zip(image_sources, results)}
     
     async def download_images_from_detection(
         self, 
@@ -348,19 +428,27 @@ class ImageProcessor:
             detection: Detection data.
             
         Returns:
-            Dict[str, Optional[str]]: Dictionary mapping URLs to cache file paths.
+            Dict[str, Optional[str]]: Dictionary mapping image sources to cache file paths.
         """
-        urls = []
+        image_sources = []
         
         if isinstance(detection, DetectionData):
             if detection.image_url:
-                urls.append(str(detection.image_url))
-            urls.extend([str(url) for url in detection.additional_image_urls])
+                image_sources.append(str(detection.image_url))
+            image_sources.extend([str(url) for url in detection.additional_image_urls])
+            
+            # Check for base64 images in attributes
+            for attr in detection.attributes:
+                if attr.name.lower() in ['image', 'base64_image', 'image_data'] and self._is_base64(attr.value):
+                    image_sources.append(attr.value)
         
         elif isinstance(detection, ALPREventData):
-            urls.extend([str(image.Image) for image in detection.Images])
+            for image in detection.Images:
+                # Check if Image field is a URL or base64 string
+                image_str = str(image.Image)
+                image_sources.append(image_str)
         
-        return await self.download_images(urls)
+        return await self.download_images(image_sources)
     
     def validate_image(self, file_path: str) -> bool:
         """Validate image file.
@@ -443,23 +531,72 @@ class ImageProcessor:
             logger.error(f"Failed to save preprocessed image to {output_path}: {e}")
             return None
     
-    async def process_image(
-        self, 
-        url: str, 
-        max_size: Optional[Tuple[int, int]] = None
-    ) -> Optional[Tuple[str, Image.Image]]:
-        """Download and process image.
+    async def get_image(
+        self,
+        image_source: str
+    ) -> Optional[str]:
+        """Get image from URL or base64 string.
         
         Args:
-            url: Image URL.
+            image_source: Image URL or base64 string.
+            
+        Returns:
+            Optional[str]: Path to cached image file, or None if processing failed.
+        """
+        # Check if it's a URL or base64 string
+        if image_source.startswith(('http://', 'https://')):
+            return await self.download_image(image_source)
+        elif image_source.startswith('data:image/') or self._is_base64(image_source):
+            return await self.process_base64_image(image_source)
+        else:
+            logger.error(f"Unsupported image source format: {image_source[:30]}...")
+            return None
+    
+    def _is_base64(self, s: str) -> bool:
+        """Check if a string is base64 encoded.
+        
+        Args:
+            s: String to check.
+            
+        Returns:
+            bool: True if string is base64 encoded, False otherwise.
+        """
+        # Quick check for common base64 patterns
+        if s.startswith('data:image/'):
+            return True
+            
+        # Check if string is valid base64
+        try:
+            # Try to decode a small sample to validate
+            if len(s) > 100:  # Only check if string is reasonably long
+                # Remove any whitespace
+                s = s.strip()
+                # Check if length is a multiple of 4 (base64 requirement)
+                if len(s) % 4 == 0:
+                    # Try to decode a small sample
+                    base64.b64decode(s[:100])
+                    return True
+            return False
+        except Exception:
+            return False
+    
+    async def process_image(
+        self, 
+        image_source: str, 
+        max_size: Optional[Tuple[int, int]] = None
+    ) -> Optional[Tuple[str, Image.Image]]:
+        """Process image from URL or base64 string.
+        
+        Args:
+            image_source: Image URL or base64 string.
             max_size: Maximum image size (width, height).
             
         Returns:
             Optional[Tuple[str, PIL.Image.Image]]: Tuple of (cache_path, processed_image),
                 or None if processing failed.
         """
-        # Download image
-        cache_path = await self.download_image(url)
+        # Get image
+        cache_path = await self.get_image(image_source)
         if not cache_path:
             return None
         
@@ -476,22 +613,22 @@ class ImageProcessor:
     
     async def process_images(
         self, 
-        urls: List[str], 
+        image_sources: List[str], 
         max_size: Optional[Tuple[int, int]] = None
     ) -> Dict[str, Optional[Tuple[str, Image.Image]]]:
         """Process multiple images.
         
         Args:
-            urls: List of image URLs.
+            image_sources: List of image URLs or base64 strings.
             max_size: Maximum image size (width, height).
             
         Returns:
-            Dict[str, Optional[Tuple[str, PIL.Image.Image]]]: Dictionary mapping URLs to
+            Dict[str, Optional[Tuple[str, PIL.Image.Image]]]: Dictionary mapping image sources to
                 tuples of (cache_path, processed_image).
         """
-        tasks = [self.process_image(url, max_size) for url in urls]
+        tasks = [self.process_image(source, max_size) for source in image_sources]
         results = await asyncio.gather(*tasks)
-        return {url: result for url, result in zip(urls, results)}
+        return {source: result for source, result in zip(image_sources, results)}
     
     async def process_images_from_detection(
         self, 
@@ -505,17 +642,25 @@ class ImageProcessor:
             max_size: Maximum image size (width, height).
             
         Returns:
-            Dict[str, Optional[Tuple[str, PIL.Image.Image]]]: Dictionary mapping URLs to
+            Dict[str, Optional[Tuple[str, PIL.Image.Image]]]: Dictionary mapping image sources to
                 tuples of (cache_path, processed_image).
         """
-        urls = []
+        image_sources = []
         
         if isinstance(detection, DetectionData):
             if detection.image_url:
-                urls.append(str(detection.image_url))
-            urls.extend([str(url) for url in detection.additional_image_urls])
-        
+                image_sources.append(str(detection.image_url))
+            image_sources.extend([str(url) for url in detection.additional_image_urls])
+            
+            # Check for base64 images in attributes
+            for attr in detection.attributes:
+                if attr.name.lower() in ['image', 'base64_image', 'image_data'] and self._is_base64(attr.value):
+                    image_sources.append(attr.value)
+            
         elif isinstance(detection, ALPREventData):
-            urls.extend([str(image.Image) for image in detection.Images])
-        
-        return await self.process_images(urls, max_size)
+            for image in detection.Images:
+                # Check if Image field is a URL or base64 string
+                image_str = str(image.Image)
+                image_sources.append(image_str)
+            
+        return await self.process_images(image_sources, max_size)
