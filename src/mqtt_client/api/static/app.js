@@ -50,9 +50,9 @@ function cacheElements() {
 // Initialize WebSocket connection
 function initWebSocket() {
     const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
-    // Use explicit port 8088 instead of relying on window.location.host
+    // Use explicit port 8089 to match server configuration
     const host = window.location.hostname;
-    const wsUrl = `${protocol}${host}:8088/ws`;
+    const wsUrl = `${protocol}${host}:8089/ws`;
     
     console.log(`Attempting to connect to WebSocket at: ${wsUrl}`);
     updateConnectionStatus('connecting');
@@ -144,7 +144,10 @@ function updateConnectionStatus(status) {
 async function loadDetectionHistory() {
     try {
         console.log('Loading detection history...');
-        const response = await fetch('/detections?limit=50');
+        // Use the correct port for API calls
+        const port = window.location.port || '8089';
+        const baseUrl = `${window.location.protocol}//${window.location.hostname}:${port}`;
+        const response = await fetch(`${baseUrl}/detections?limit=50`);
         if (!response.ok) {
             throw new Error(`HTTP error! Status: ${response.status}`);
         }
@@ -279,7 +282,25 @@ function updateImageViewer(detection) {
     
     if (imageUrl) {
         const img = document.createElement('img');
-        img.src = `/images/${imageUrl.split('/').pop()}`;
+        
+        // Handle different image URL formats
+        if (imageUrl.startsWith('http')) {
+            // For external URLs, use the cached version if available
+            const filename = imageUrl.split('/').pop();
+            // Use the correct port for the image URL
+            const port = window.location.port || '8089';
+            const baseUrl = `${window.location.protocol}//${window.location.hostname}:${port}`;
+            img.src = `${baseUrl}/images/${filename}`;
+        } else if (imageUrl.startsWith('data:')) {
+            // For base64 images, use directly
+            img.src = imageUrl;
+        } else {
+            // For relative paths or just filenames
+            const port = window.location.port || '8089';
+            const baseUrl = `${window.location.protocol}//${window.location.hostname}:${port}`;
+            img.src = `${baseUrl}/images/${imageUrl}`;
+        }
+        
         img.alt = 'Detection Image';
         img.onload = function() {
             // After image loads, add bounding boxes if available
@@ -288,6 +309,7 @@ function updateImageViewer(detection) {
             }
         };
         img.onerror = function() {
+            console.error('Failed to load image:', img.src);
             // Show placeholder if image fails to load
             showPlaceholderImage('Image failed to load');
         };

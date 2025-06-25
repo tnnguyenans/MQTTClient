@@ -283,8 +283,8 @@ def main() -> None:
         app = create_app()
         
         # Configure uvicorn
-        # Explicitly set port to 8088 to override any configuration
-        port = 8088
+        # Explicitly set port to 8089 to avoid conflicts
+        port = 8089
         host = config.api.host if hasattr(config, 'api') and hasattr(config.api, 'host') else "0.0.0.0"
         
         logger.info(f"Starting server on {host}:{port}")
