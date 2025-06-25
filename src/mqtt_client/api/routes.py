@@ -9,6 +9,7 @@ import uuid
 from typing import Dict, List, Any, Optional, Union
 from datetime import datetime
 from pathlib import Path
+from pydantic import BaseModel
 
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, Response
 from fastapi.responses import FileResponse, RedirectResponse
@@ -325,40 +326,82 @@ async def get_image(filename: str) -> FileResponse:
     )
 
 
-@router.get("/base64/{encoded_data}", summary="Get image from base64 data")
-async def get_base64_image(encoded_data: str) -> Response:
-    """Convert base64 data to an image and return it.
+class ImageRequestModel(BaseModel):
+    """Model for image request data."""
+    data: str
+
+@router.post("/api/image", summary="Get image from raw data or base64")
+async def get_image_data(request: ImageRequestModel) -> Response:
+    """Process image data and return it.
     
     Args:
-        encoded_data: Base64 encoded image data.
+        request: Request model containing image data.
         
     Returns:
         Response: Image data.
         
     Raises:
-        HTTPException: If data cannot be decoded.
+        HTTPException: If data cannot be processed.
     """
+    encoded_data = request.data
+    logger.info(f"Received image request with data length: {len(encoded_data) if encoded_data else 0} chars")
+    
     try:
         # URL decode the string first (it may have been URL encoded)
         import urllib.parse
-        decoded_data = urllib.parse.unquote(encoded_data)
-        
-        # Try to decode the base64 data
-        import base64
         from io import BytesIO
+        from PIL import Image
+        import base64
         
-        # Clean the data - remove any non-base64 characters
-        import re
-        # Keep only valid base64 characters: A-Z, a-z, 0-9, +, /, and =
-        cleaned_data = re.sub(r'[^A-Za-z0-9+/=]', '', decoded_data)
+        decoded_data = urllib.parse.unquote(encoded_data)
+        logger.debug(f"URL decoded data length: {len(decoded_data)}")
         
-        # Add padding if needed
-        padding_needed = len(cleaned_data) % 4
-        if padding_needed:
-            cleaned_data += '=' * (4 - padding_needed)
+        # Log the first and last few characters to help debug format issues
+        if len(decoded_data) > 20:
+            prefix = decoded_data[:20]
+            suffix = decoded_data[-20:]
+            logger.debug(f"Data prefix: {prefix}... suffix: ...{suffix}")
+        
+        # Check if this is a data URI format
+        if decoded_data.startswith('data:'):
+            logger.info("Detected data URI format")
+            # Extract the content type and data part
+            header, data_part = decoded_data.split(',', 1)
+            content_type = header.split(';')[0].split(':')[1]
+            logger.info(f"Content type from URI: {content_type}")
             
-        # Decode the base64 data
-        image_data = base64.b64decode(cleaned_data)
+            # Check if this is base64 encoded
+            if ';base64' in header:
+                logger.info("Data URI contains base64 encoded data")
+                # Decode base64 data
+                try:
+                    image_data = base64.b64decode(data_part)
+                    logger.info(f"Successfully decoded base64 data to {len(image_data)} bytes")
+                except Exception as b64_error:
+                    logger.error(f"Failed to decode base64 data: {str(b64_error)}")
+                    raise HTTPException(status_code=400, detail=f"Invalid base64 data in URI: {str(b64_error)}")
+            else:
+                # Raw data in URI
+                logger.info("Data URI contains raw data")
+                image_data = data_part.encode('latin1')  # Use latin1 to preserve byte values
+        else:
+            # Assume it's raw JPEG data
+            logger.info("Processing as raw JPEG string data")
+            try:
+                # Convert string to bytes using latin1 encoding to preserve byte values
+                image_data = decoded_data.encode('latin1')
+                logger.info(f"Converted string to {len(image_data)} bytes using latin1 encoding")
+            except Exception as enc_error:
+                logger.error(f"Failed to encode string as bytes: {str(enc_error)}")
+                raise HTTPException(status_code=400, detail=f"Failed to process image data: {str(enc_error)}")
+        
+        # Validate the image data by trying to open it with PIL
+        try:
+            img = Image.open(BytesIO(image_data))
+            logger.info(f"Validated image: {img.format}, size: {img.size}, mode: {img.mode}")
+        except Exception as img_error:
+            logger.error(f"Invalid image data: {str(img_error)}")
+            # Continue with the original data, let the browser try to render it
         
         # Return the image
         return Response(
@@ -366,9 +409,12 @@ async def get_base64_image(encoded_data: str) -> Response:
             media_type="image/jpeg"
         )
     except Exception as e:
-        logger.error(f"Error decoding base64 data: {str(e)}")
-        raise HTTPException(status_code=400, detail=f"Invalid base64 data: {str(e)}")
-
+        logger.error(f"Error processing image data: {str(e)}")
+        # Log the first 100 characters of input to help debug
+        if encoded_data and len(encoded_data) > 0:
+            sample = encoded_data[:min(100, len(encoded_data))]
+            logger.error(f"Sample of problematic data: {sample}...")
+        raise HTTPException(status_code=400, detail=f"Could not process image data: {str(e)}")
 
 
 @router.websocket("/ws")

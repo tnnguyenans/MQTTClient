@@ -340,21 +340,45 @@ function updateImageViewer(detection) {
                 };
             };
         } else if (isLikelyBase64(imageUrl)) {
-            // If it looks like a base64 string without the data URI prefix, try our base64 endpoint
-            console.log('Detected likely base64 string, using base64 endpoint');
-            img.src = `/base64/${encodeURIComponent(imageUrl)}`;
+            // If it looks like a base64 string without the data URI prefix, use our image endpoint
+            console.log('Detected likely raw image data, using image endpoint');
             
-            // If base64 endpoint fails, try adding data URI prefix as fallback
-            img.onerror = function() {
-                console.log('Base64 endpoint failed, trying with data URI prefix');
+            // Create a unique blob URL for this image
+            const blobUrl = URL.createObjectURL(new Blob(['loading'], {type: 'text/plain'}));
+            img.src = blobUrl;
+            
+            // Make a POST request to the image endpoint
+            fetch('/api/image', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ data: imageUrl })
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Image endpoint returned status ' + response.status);
+                }
+                return response.blob();
+            })
+            .then(blob => {
+                // Create a URL for the blob and set it as the image source
+                const imageUrl = URL.createObjectURL(blob);
+                img.src = imageUrl;
+                console.log('Successfully loaded image from endpoint');
+            })
+            .catch(error => {
+                console.error('Error loading image:', error);
+                // Try with data URI as fallback
+                console.log('Image endpoint failed, trying with data URI prefix');
                 img.src = `data:image/jpeg;base64,${imageUrl}`;
                 
                 // If that also fails, show placeholder
                 img.onerror = function() {
-                    console.error('Failed to load base64 image');
+                    console.error('Failed to load image');
                     showPlaceholderImage('Image failed to load');
                 };
-            };
+            });
         } else {
             // For relative paths or just filenames
             img.src = `/images/${imageUrl}`;
