@@ -6,9 +6,9 @@ A Python-based MQTT client application that subscribes to a Mosquitto MQTT broke
 
 - [x] **Project Setup and MQTT Client**: Basic MQTT client that connects to Mosquitto broker and subscribes to specified topic
 - [x] **Data Models and Validation**: Pydantic models for object detection data
-- [ ] **Image Download and Processing**: Download and process images from URLs
-- [ ] **LLM Integration**: Analyze images using LLM to extract additional attributes
-- [ ] **Producer/Consumer Pattern**: Implement async processing queue
+- [x] **Image Download and Processing**: Download and process images from URLs and base64 strings with caching
+- [x] **LLM Integration**: Analyze images using LLM to extract additional attributes (colors, actions, descriptions)
+- [x] **Producer/Consumer Pattern**: Implement async processing queue system with MQTT, image, LLM, and UI stages
 - [ ] **Database Layer**: Store detection history in SQLite
 - [ ] **FastAPI Backend**: Create API endpoints and WebSocket connections
 - [ ] **Web UI**: Display real-time detection data and images
