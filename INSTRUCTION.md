@@ -82,19 +82,7 @@ Feature 5: Producer/Consumer Pattern Implementation
   5. Implement queue management and flow control
 - **Status**: [x] Completed
 
-### Feature 6: Database Layer for Detection History
-- **Description**: Store detection history, processed images, and LLM analysis results in SQLite database
-- **Technology**: SQLModel, SQLAlchemy, SQLite, alembic
-- **Action**: Persist detection data, enable historical queries and analytics
-- **Steps**:
-  1. Create database models (Detection, Image, Analysis)
-  2. Implement database connection and session management
-  3. Add CRUD operations
-  4. Create database migration system
-  5. Add data cleanup and archiving
-- **Status**: [ ] Not Started
-
-### Feature 7: FastAPI Backend with WebSocket Support
+### Feature 6: FastAPI Backend with WebSocket Support
 - **Description**: Create FastAPI backend with REST API endpoints and WebSocket connections for real-time UI updates
 - **Technology**: FastAPI, WebSockets, uvicorn
 - **Action**: Serve API endpoints for detection data and establish WebSocket connections for live updates
@@ -106,7 +94,7 @@ Feature 5: Producer/Consumer Pattern Implementation
   5. Create API response models
 - **Status**: [ ] Not Started
 
-### Feature 8: Web UI for Desktop Browser
+### Feature 7: Web UI for Desktop Browser
 - **Description**: Create responsive web interface displaying real-time detection data, images, and LLM analysis results
 - **Technology**: HTML5, CSS3, JavaScript, WebSocket API, Chart.js (for analytics)
 - **Action**: Display live detection feed, image gallery, attribute analysis, and basic analytics dashboard
@@ -119,7 +107,7 @@ Feature 5: Producer/Consumer Pattern Implementation
   6. Implement basic analytics dashboard
 - **Status**: [ ] Not Started
 
-### Feature 9: Configuration and Deployment
+### Feature 8: Configuration and Deployment
 - **Description**: Add comprehensive configuration management, logging, and deployment setup
 - **Technology**: pydantic-settings, python-dotenv, logging, docker (optional)
 - **Action**: Configure MQTT settings, LLM settings, database settings, and deployment options
@@ -130,19 +118,6 @@ Feature 5: Producer/Consumer Pattern Implementation
   4. Add health check endpoints
   5. Create deployment documentation
   6. Optional: Add Docker containerization
-- **Status**: [ ] Not Started
-
-### Feature 10: Testing and Quality Assurance
-- **Description**: Comprehensive test suite covering all components with unit tests, integration tests, and end-to-end tests
-- **Technology**: pytest, pytest-asyncio, pytest-mock, httpx
-- **Action**: Ensure application reliability and maintainability through thorough testing
-- **Steps**:
-  1. Create unit tests for all modules
-  2. Add integration tests for MQTT, LLM, and database components
-  3. Implement API endpoint tests
-  4. Add WebSocket connection tests
-  5. Create performance and load tests
-  6. Add test data fixtures and mocks
 - **Status**: [ ] Not Started
 
 ## Project Structure
@@ -163,9 +138,6 @@ mqtt_client/
 │   │   ├── llm/
 │   │   │   ├── __init__.py
 │   │   │   └── analyzer.py
-│   │   ├── database/
-│   │   │   ├── __init__.py
-│   │   │   └── models.py
 │   │   ├── api/
 │   │   │   ├── __init__.py
 │   │   │   └── routes.py
