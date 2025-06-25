@@ -28,7 +28,6 @@ logger = logging.getLogger(__name__)
 mqtt_client: Optional[MQTTClient] = None
 image_processor: Optional[ImageProcessor] = None
 image_queue: Optional[ImageProcessingQueue] = None
-main_event_loop: Optional[asyncio.AbstractEventLoop] = None
 
 
 def handle_detection(data: Union[DetectionData, ALPREventData]) -> None:
@@ -37,8 +36,14 @@ def handle_detection(data: Union[DetectionData, ALPREventData]) -> None:
     Args:
         data: Validated detection data (either DetectionData or ALPREventData).
     """
-    global main_event_loop
-    
+    # Get the current event loop or create a new one if needed
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        # No running event loop, create a new one
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
     if isinstance(data, ALPREventData):
         # Handle ALPR event data
         logger.info(f"Received ALPR event: {data.EventName}")
@@ -66,15 +71,13 @@ def handle_detection(data: Union[DetectionData, ALPREventData]) -> None:
             logger.info(f"Image {i+1}: {url}")
         
         # Queue detection data for image processing
-        if image_queue and main_event_loop:
+        if image_queue:
+            # Get the current event loop and create a task
             try:
-                # Use thread-safe approach to schedule task on main event loop
-                asyncio.run_coroutine_threadsafe(image_queue.put(data), main_event_loop)
-                logger.debug("Successfully queued ALPR data for processing")
+                loop = asyncio.get_running_loop()
+                loop.create_task(image_queue.put(data))
             except Exception as e:
                 logger.error(f"Error queueing ALPR data for processing: {e}")
-        else:
-            logger.warning("Cannot queue ALPR data: image queue or main event loop not initialized")
         
     elif isinstance(data, DetectionData):
         # Handle generic detection data
@@ -100,15 +103,13 @@ def handle_detection(data: Union[DetectionData, ALPREventData]) -> None:
                 logger.info(f"Additional image {i+1}: {url}")
         
         # Queue detection data for image processing
-        if image_queue and main_event_loop:
+        if image_queue:
+            # Get the current event loop and create a task
             try:
-                # Use thread-safe approach to schedule task on main event loop
-                asyncio.run_coroutine_threadsafe(image_queue.put(data), main_event_loop)
-                logger.debug("Successfully queued detection data for processing")
+                loop = asyncio.get_running_loop()
+                loop.create_task(image_queue.put(data))
             except Exception as e:
                 logger.error(f"Error queueing detection data for processing: {e}")
-        else:
-            logger.warning("Cannot queue detection data: image queue or main event loop not initialized")
     
     else:
         logger.warning(f"Received unknown data type: {type(data).__name__}")
@@ -198,9 +199,14 @@ def handle_exit(signum, frame) -> None:
         signum: Signal number.
         frame: Current stack frame.
     """
-    global main_event_loop
-    
     logger.info("Received exit signal, shutting down...")
+    
+    # Create event loop for cleanup
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
     
     # Define cleanup coroutine
     async def cleanup():
@@ -218,13 +224,10 @@ def handle_exit(signum, frame) -> None:
             mqtt_client.disconnect()
     
     # Run cleanup
-    if main_event_loop and main_event_loop.is_running():
-        main_event_loop.create_task(cleanup())
+    if loop.is_running():
+        loop.create_task(cleanup())
     else:
-        # Create a new event loop for cleanup if main loop is not available
-        cleanup_loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(cleanup_loop)
-        cleanup_loop.run_until_complete(cleanup())
+        loop.run_until_complete(cleanup())
     
     sys.exit(0)
 
@@ -247,7 +250,7 @@ async def setup_image_processing(config) -> None:
     image_queue = ImageProcessingQueue(processor=process_detection_images)
     
     # Start image processing queue
-    await image_queue.start()
+    image_queue.start()
     
     logger.info("Image processing components initialized")
 
@@ -296,19 +299,17 @@ async def async_main() -> None:
 
 def main() -> None:
     """Run the MQTT client application."""
-    global main_event_loop
-    
     # Register signal handlers
     signal.signal(signal.SIGINT, handle_exit)
     signal.signal(signal.SIGTERM, handle_exit)
     
     try:
-        # Create a new event loop and store it globally
-        main_event_loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(main_event_loop)
+        # Create a new event loop
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
         
         # Run async main
-        main_event_loop.run_until_complete(async_main())
+        loop.run_until_complete(async_main())
     except KeyboardInterrupt:
         logger.info("Interrupted by user")
     except Exception as e:

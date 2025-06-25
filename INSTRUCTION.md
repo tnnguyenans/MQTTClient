@@ -51,7 +51,10 @@ A Python-based MQTT client application that subscribes to a Mosquitto MQTT broke
   2. Add local image caching system
   3. Create image preprocessing utilities
   4. Add image validation and error handling
-- **Status**: [ ] Not Started
+  5. Fix asyncio event loop handling for MQTT callbacks
+  6. Add browser-like headers for S3 access
+  7. Implement fallback to placeholder images when download fails
+- **Status**: [x] Completed
 
 ### Feature 4: LLM Integration for Image Analysis
 - **Description**: Integrate LLM (OpenAI API or local Ollama) to analyze images and extract additional attributes like colors, actions, descriptions
