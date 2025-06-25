@@ -57,16 +57,36 @@ A Python-based MQTT client application that subscribes to a Mosquitto MQTT broke
   8. Add support for base64 encoded images
 - **Status**: [x] Completed
 
-### Feature 4: LLM Integration for Image Analysis
-- **Description**: Integrate LLM (OpenAI API or local Ollama) to analyze images and extract additional attributes like colors, actions, descriptions
-- **Technology**: OpenAI API or Ollama, base64 encoding, asyncio
-- **Action**: Send images to LLM with detection context, receive enhanced attribute analysis
+### Feature 4: LLM Integration for Object-Specific Image Analysis
+- **Description**: Integrate LLM (OpenAI API or local Ollama) to analyze detection data that contains detection information and images. Use bounding box coordinates to extract individual objects from images, then analyze each extracted object with LLM to determine additional attributes like colors, actions, descriptions, and contextual information
+- **Technology**: OpenAI API or Ollama, Pillow (PIL) for image cropping, base64 encoding, asyncio, numpy
+- **Action**: Extract objects using bounding boxes, send cropped object images to LLM with detection context, receive enhanced attribute analysis for each detected object
 - **Steps**:
-  1. Implement LLM client (OpenAI or Ollama)
-  2. Create image-to-text analysis prompts
-  3. Add attribute extraction logic (colors, actions, descriptions)
+  1. Implement bounding box object extraction from full images
+    - Parse bounding box coordinates (x, y, width, height)
+    - Crop objects from original images using PIL
+    - Handle edge cases (boxes outside image bounds, minimum size thresholds)
+    - Add padding around objects for better context
+  2. Implement LLM client (OpenAI GPT-4V or Ollama with vision model)
+    - Support both OpenAI API and local Ollama deployment
+    - Add configuration switching between providers
+    - Implement retry logic and error handling
+  3. Create object-specific analysis prompts
+    - Design prompts that include object type from detection
+    - Request specific attributes: colors, materials, actions, poses, conditions
+    - Include contextual questions based on object type (e.g., vehicle → make/model, person → clothing/activity)
   4. Implement async LLM processing queue
+    - Process multiple objects from same detection simultaneously
+    - Add rate limiting to respect API limits
+    - Implement batch processing for efficiency
   5. Add LLM response parsing and validation
+    - Parse structured responses (JSON format preferred)
+    - Validate attribute extraction completeness
+    - Handle partial or failed analyses gracefully
+  6. Create object attribute aggregation
+    - Combine individual object analyses with original detection data
+    - Create comprehensive detection results with enhanced attributes
+    - Maintain object-to-analysis mapping for UI display
 - **Status**: [ ] Not Started
 
 ### Feature 5: Producer/Consumer Pattern Implementation
