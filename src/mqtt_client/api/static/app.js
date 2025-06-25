@@ -12,15 +12,39 @@ const state = {
     maxDetections: 100, // Maximum number of detections to keep in memory
 };
 
+// Global elements object to store DOM references
+const elements = {};
+
+/**
+ * Shows a placeholder message when an image fails to load
+ * @param {string} message - Message to display in the placeholder
+ */
+function showPlaceholderImage(message) {
+    // Clear any existing content
+    elements.imageViewer.innerHTML = '';
+    
+    // Create placeholder element
+    const placeholder = document.createElement('div');
+    placeholder.className = 'placeholder-image';
+    placeholder.style.padding = '20px';
+    placeholder.style.backgroundColor = '#f8f9fa';
+    placeholder.style.border = '1px solid #dee2e6';
+    placeholder.style.borderRadius = '4px';
+    placeholder.style.textAlign = 'center';
+    placeholder.style.color = '#6c757d';
+    placeholder.textContent = message || 'No image available';
+    
+    // Add to DOM
+    elements.imageViewer.appendChild(placeholder);
+}
+
 // DOM elements cache
-const elements = {
-    statusIndicator: null,
-    statusText: null,
-    eventList: null,
-    imageViewer: null,
-    detectionInfo: null,
-    analysisSection: null,
-};
+elements.statusIndicator = null;
+elements.statusText = null;
+elements.eventList = null;
+elements.imageViewer = null;
+elements.detectionInfo = null;
+elements.analysisSection = null;
 
 // Initialize the application when DOM is fully loaded
 document.addEventListener('DOMContentLoaded', () => {
@@ -52,7 +76,8 @@ function initWebSocket() {
     const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
     // Use explicit port 8089 to match server configuration
     const host = window.location.hostname;
-    const wsUrl = `${protocol}${host}:8089/ws`;
+    const port = 8089;
+    const wsUrl = `${protocol}${host}:${port}/ws`;
     
     console.log(`Attempting to connect to WebSocket at: ${wsUrl}`);
     updateConnectionStatus('connecting');
@@ -144,10 +169,8 @@ function updateConnectionStatus(status) {
 async function loadDetectionHistory() {
     try {
         console.log('Loading detection history...');
-        // Use the correct port for API calls
-        const port = window.location.port || '8089';
-        const baseUrl = `${window.location.protocol}//${window.location.hostname}:${port}`;
-        const response = await fetch(`${baseUrl}/detections?limit=50`);
+        // Use absolute paths for API endpoints
+        const response = await fetch('/detections?limit=50');
         if (!response.ok) {
             throw new Error(`HTTP error! Status: ${response.status}`);
         }
@@ -283,22 +306,58 @@ function updateImageViewer(detection) {
     if (imageUrl) {
         const img = document.createElement('img');
         
+        // Helper function to check if a string might be base64 encoded
+        function isLikelyBase64(str) {
+            // Check if the string is very long and contains base64 characters
+            if (str.length > 100) {
+                // Base64 uses these characters: A-Z, a-z, 0-9, +, /, and = for padding
+                const base64Pattern = /^[A-Za-z0-9+/=]+$/;
+                // Check if at least 90% of characters match base64 pattern
+                const validChars = str.split('').filter(char => base64Pattern.test(char)).length;
+                return validChars / str.length > 0.9;
+            }
+            return false;
+        }
+        
         // Handle different image URL formats
-        if (imageUrl.startsWith('http')) {
-            // For external URLs, use the cached version if available
-            const filename = imageUrl.split('/').pop();
-            // Use the correct port for the image URL
-            const port = window.location.port || '8089';
-            const baseUrl = `${window.location.protocol}//${window.location.hostname}:${port}`;
-            img.src = `${baseUrl}/images/${filename}`;
-        } else if (imageUrl.startsWith('data:')) {
-            // For base64 images, use directly
+        if (imageUrl.startsWith('data:')) {
+            // For base64 images with proper data URI format, use directly
             img.src = imageUrl;
+        } else if (imageUrl.startsWith('http')) {
+            // For external URLs, try direct access first
+            const filename = imageUrl.split('/').pop();
+            img.src = imageUrl;
+            
+            // If direct access fails, fall back to cached version
+            img.onerror = function() {
+                console.log('Direct URL access failed, trying cached version');
+                img.src = `/images/${filename}`;
+                
+                // If cached version fails, show placeholder
+                img.onerror = function() {
+                    console.error('Failed to load image from cache:', filename);
+                    showPlaceholderImage('Image failed to load');
+                };
+            };
+        } else if (isLikelyBase64(imageUrl)) {
+            // If it looks like a base64 string without the data URI prefix, try our base64 endpoint
+            console.log('Detected likely base64 string, using base64 endpoint');
+            img.src = `/base64/${encodeURIComponent(imageUrl)}`;
+            
+            // If base64 endpoint fails, try adding data URI prefix as fallback
+            img.onerror = function() {
+                console.log('Base64 endpoint failed, trying with data URI prefix');
+                img.src = `data:image/jpeg;base64,${imageUrl}`;
+                
+                // If that also fails, show placeholder
+                img.onerror = function() {
+                    console.error('Failed to load base64 image');
+                    showPlaceholderImage('Image failed to load');
+                };
+            };
         } else {
             // For relative paths or just filenames
-            const port = window.location.port || '8089';
-            const baseUrl = `${window.location.protocol}//${window.location.hostname}:${port}`;
-            img.src = `${baseUrl}/images/${imageUrl}`;
+            img.src = `/images/${imageUrl}`;
         }
         
         img.alt = 'Detection Image';
@@ -313,6 +372,8 @@ function updateImageViewer(detection) {
             // Show placeholder if image fails to load
             showPlaceholderImage('Image failed to load');
         };
+        
+
         elements.imageViewer.appendChild(img);
     } else {
         showPlaceholderImage('No image available');

@@ -1,6 +1,8 @@
 """FastAPI application for MQTT Client."""
 
+import os
 import logging
+from pathlib import Path
 from typing import Any, Callable
 
 from fastapi import FastAPI, Request
@@ -73,6 +75,17 @@ def create_app() -> FastAPI:
     
     # Mount static files for CSS, JS, etc.
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
+    
+    # Mount image cache directory for direct image access
+    # Import at the top level to avoid scope issues
+    cache_dir = os.path.join(str(Path.home()), ".mqtt_client_cache")
+    logger.info(f"Mounting image cache directory: {cache_dir}")
+    if os.path.exists(cache_dir):
+        app.mount("/images", StaticFiles(directory=cache_dir), name="images")
+    else:
+        logger.warning(f"Image cache directory not found: {cache_dir}")
+        os.makedirs(cache_dir, exist_ok=True)
+        app.mount("/images", StaticFiles(directory=cache_dir), name="images")
     
     # Mount API router directly at root path for API endpoints
     app.include_router(router)

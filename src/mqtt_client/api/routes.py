@@ -10,8 +10,8 @@ from typing import Dict, List, Any, Optional, Union
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, Response
+from fastapi.responses import FileResponse, RedirectResponse
 
 from mqtt_client.config import load_config
 from mqtt_client.models.detection import DetectionData
@@ -305,6 +305,12 @@ async def get_image(filename: str) -> FileResponse:
     # Get application config
     config = load_config()
     
+    # Check if this might be a base64 string (they sometimes get passed as filenames)
+    if len(filename) > 100 and not filename.endswith(('.jpg', '.jpeg', '.png', '.gif')):
+        # Redirect to the base64 endpoint
+        logger.info(f"Redirecting potential base64 string to base64 endpoint")
+        return RedirectResponse(url=f"/base64/{filename}")
+    
     # Get image path
     image_path = Path(config.image_processor.cache_dir) / filename
     
@@ -317,6 +323,52 @@ async def get_image(filename: str) -> FileResponse:
         image_path, 
         media_type=f"image/{image_path.suffix.replace('.', '')}"
     )
+
+
+@router.get("/base64/{encoded_data}", summary="Get image from base64 data")
+async def get_base64_image(encoded_data: str) -> Response:
+    """Convert base64 data to an image and return it.
+    
+    Args:
+        encoded_data: Base64 encoded image data.
+        
+    Returns:
+        Response: Image data.
+        
+    Raises:
+        HTTPException: If data cannot be decoded.
+    """
+    try:
+        # URL decode the string first (it may have been URL encoded)
+        import urllib.parse
+        decoded_data = urllib.parse.unquote(encoded_data)
+        
+        # Try to decode the base64 data
+        import base64
+        from io import BytesIO
+        
+        # Clean the data - remove any non-base64 characters
+        import re
+        # Keep only valid base64 characters: A-Z, a-z, 0-9, +, /, and =
+        cleaned_data = re.sub(r'[^A-Za-z0-9+/=]', '', decoded_data)
+        
+        # Add padding if needed
+        padding_needed = len(cleaned_data) % 4
+        if padding_needed:
+            cleaned_data += '=' * (4 - padding_needed)
+            
+        # Decode the base64 data
+        image_data = base64.b64decode(cleaned_data)
+        
+        # Return the image
+        return Response(
+            content=image_data,
+            media_type="image/jpeg"
+        )
+    except Exception as e:
+        logger.error(f"Error decoding base64 data: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Invalid base64 data: {str(e)}")
+
 
 
 @router.websocket("/ws")
