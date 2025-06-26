@@ -13,10 +13,8 @@ A Python-based MQTT client application that subscribes to a Mosquitto MQTT broke
 - [x] **LLM Integration**: Analyze images using LLM to extract additional attributes (colors, actions, descriptions)
 - [x] **Producer/Consumer Pattern**: Implement async processing queue system with MQTT, image, LLM, and UI stages
   - [x] **Improved Concurrency**: Enhanced async task management for reliable operation
-- [ ] **FastAPI Backend**: Create API endpoints and WebSocket connections
-- [ ] **Web UI**: Display real-time detection data and images
-- [ ] **Database Layer**: Store detection history in SQLite
-- [ ] **Configuration and Deployment**: Add comprehensive configuration management
+- [x] **FastAPI Backend**: Create API endpoints and WebSocket connections
+- [x] **Web UI**: Display real-time detection data and images: Still need to improve UI to capture more meaningful results
 
 ## Setup
 
