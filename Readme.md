@@ -102,6 +102,9 @@ Once the server is running, you can access the web UI at:
 http://localhost:8089
 ```
 
+![image](https://github.com/user-attachments/assets/562d41b9-eecc-4104-a5ed-9529bae1e01d)
+
+
 ## Configuration
 
 The default configuration connects to a local MQTT broker on port 1883 and subscribes to the `detection/objects` topic. You can modify these settings in `src/mqtt_client/config.py`.
