@@ -424,7 +424,7 @@ async def get_image_data(request: ImageRequestModel) -> Response:
         # Import required modules
         import urllib.parse
         from io import BytesIO
-        from PIL import Image
+        from PIL import Image, ImageDraw
         import base64
         import re
         
@@ -436,7 +436,25 @@ async def get_image_data(request: ImageRequestModel) -> Response:
         if len(decoded_data) > 20:
             prefix = decoded_data[:20]
             suffix = decoded_data[-20:]
-            logger.debug(f"Data prefix: {prefix}... suffix: ...{suffix}")
+            logger.info(f"Data prefix: {prefix}... suffix: ...{suffix}")
+            
+        # Log more detailed information about the data
+        logger.info(f"Data type: {type(decoded_data)}, length: {len(decoded_data)}")
+        if len(decoded_data) > 1000:
+            logger.info(f"First 100 chars: {decoded_data[:100]}")
+            logger.info(f"Last 100 chars: {decoded_data[-100:]}")
+        else:
+            logger.info(f"Full data: {decoded_data}")
+            
+        # Check for common patterns in the data
+        patterns = {
+            'data_uri_prefix': decoded_data.startswith('data:'),
+            'http_url': decoded_data.startswith('http'),
+            'base64_chars': bool(re.match(r'^[A-Za-z0-9+/=]+$', decoded_data[:100])),
+            'contains_jpeg_header': b'\xff\xd8\xff' in decoded_data.encode('latin1', errors='ignore')[:20],
+            'contains_null_bytes': '\x00' in decoded_data[:1000]
+        }
+        logger.info(f"Data patterns: {patterns}")
         
         # Initialize image_data variable
         image_data = None
@@ -497,40 +515,147 @@ async def get_image_data(request: ImageRequestModel) -> Response:
             img = Image.open(BytesIO(image_data))
             logger.info(f"Validated image: {img.format}, size: {img.size}, mode: {img.mode}")
             
-            # Convert to JPEG if it's not already
-            if img.format != 'JPEG':
-                logger.info(f"Converting {img.format} to JPEG")
-                output = BytesIO()
-                if img.mode != 'RGB':
-                    img = img.convert('RGB')
-                img.save(output, format='JPEG', quality=95)
-                image_data = output.getvalue()
-                logger.info(f"Converted to JPEG: {len(image_data)} bytes")
+            # Always convert to JPEG with consistent settings
+            output = BytesIO()
+            if img.mode != 'RGB':
+                img = img.convert('RGB')
+            img.save(output, format='JPEG', quality=95)
+            image_data = output.getvalue()
+            logger.info(f"Processed image to JPEG: {len(image_data)} bytes")
         except Exception as img_error:
             logger.error(f"Invalid image data: {str(img_error)}")
-            # Try one more approach - clean the data and try base64 decoding
+            # Try multiple approaches for handling problematic image data
             try:
-                # Clean the string to only include valid base64 characters
+                # Approach 1: Clean the string to only include valid base64 characters
+                logger.info("Trying base64 cleaning approach")
                 cleaned_data = re.sub(r'[^A-Za-z0-9+/=]', '', decoded_data)
                 # Add padding if needed
                 padding_needed = len(cleaned_data) % 4
                 if padding_needed:
                     cleaned_data += '=' * (4 - padding_needed)
-                    
-                image_data = base64.b64decode(cleaned_data)
-                logger.info(f"Decoded after cleaning: {len(image_data)} bytes")
                 
-                # Verify it's a valid image
-                img = Image.open(BytesIO(image_data))
-                logger.info(f"Validated cleaned image: {img.format}, size: {img.size}")
+                try:
+                    image_data = base64.b64decode(cleaned_data)
+                    logger.info(f"Decoded after cleaning: {len(image_data)} bytes")
+                    
+                    # Verify it's a valid image
+                    img = Image.open(BytesIO(image_data))
+                    logger.info(f"Validated cleaned image: {img.format}, size: {img.size}")
+                    
+                    # Always convert to JPEG with consistent settings
+                    output = BytesIO()
+                    if img.mode != 'RGB':
+                        img = img.convert('RGB')
+                    img.save(output, format='JPEG', quality=95)
+                    image_data = output.getvalue()
+                    logger.info(f"Processed cleaned image to JPEG: {len(image_data)} bytes")
+                    return Response(
+                        content=image_data,
+                        media_type="image/jpeg",
+                        headers={"Content-Type": "image/jpeg", "Content-Length": str(len(image_data))}
+                    )
+                except Exception as b64_error:
+                    logger.error(f"Base64 cleaning approach failed: {str(b64_error)}")
+                
+                # Approach 2: Try to extract data from a URL if it looks like one
+                if decoded_data.startswith('http'):
+                    logger.info("Trying URL extraction approach")
+                    try:
+                        import requests
+                        response = requests.get(decoded_data, timeout=5)
+                        if response.status_code == 200:
+                            image_data = response.content
+                            img = Image.open(BytesIO(image_data))
+                            logger.info(f"Successfully downloaded image from URL: {img.format}, size: {img.size}")
+                            
+                            # Convert to JPEG
+                            output = BytesIO()
+                            if img.mode != 'RGB':
+                                img = img.convert('RGB')
+                            img.save(output, format='JPEG', quality=95)
+                            image_data = output.getvalue()
+                            return Response(
+                                content=image_data,
+                                media_type="image/jpeg",
+                                headers={"Content-Type": "image/jpeg", "Content-Length": str(len(image_data))}
+                            )
+                    except Exception as url_error:
+                        logger.error(f"URL extraction approach failed: {str(url_error)}")
+                
+                # Approach 3: Try to find JPEG magic bytes in the data
+                logger.info("Trying JPEG magic bytes approach")
+                try:
+                    raw_bytes = decoded_data.encode('latin1', errors='ignore')
+                    jpeg_start = raw_bytes.find(b'\xff\xd8\xff')
+                    if jpeg_start >= 0:
+                        # Found JPEG header, try to extract the image
+                        logger.info(f"Found JPEG header at position {jpeg_start}")
+                        image_data = raw_bytes[jpeg_start:]
+                        img = Image.open(BytesIO(image_data))
+                        logger.info(f"Successfully extracted JPEG: {img.format}, size: {img.size}")
+                        
+                        # Convert to clean JPEG
+                        output = BytesIO()
+                        if img.mode != 'RGB':
+                            img = img.convert('RGB')
+                        img.save(output, format='JPEG', quality=95)
+                        image_data = output.getvalue()
+                        return Response(
+                            content=image_data,
+                            media_type="image/jpeg",
+                            headers={"Content-Type": "image/jpeg", "Content-Length": str(len(image_data))}
+                        )
+                except Exception as jpeg_error:
+                    logger.error(f"JPEG magic bytes approach failed: {str(jpeg_error)}")
+                
+                # All approaches failed, create a placeholder image
+                logger.error("All image processing approaches failed")
+                placeholder = Image.new('RGB', (800, 600), color=(200, 200, 200))
+                draw = ImageDraw.Draw(placeholder)
+                font_size = 20  # Larger font size
+                draw.text((50, 280), "Image processing failed", fill=(0, 0, 0))
+                draw.text((50, 310), "Please check server logs for details", fill=(0, 0, 0))
+                output = BytesIO()
+                placeholder.save(output, format='JPEG', quality=95)
+                image_data = output.getvalue()
+                logger.info("Created placeholder image")
+                return Response(
+                    content=image_data,
+                    media_type="image/jpeg",
+                    headers={"Content-Type": "image/jpeg", "Content-Length": str(len(image_data))}
+                )
             except Exception as final_error:
-                logger.error(f"All image processing attempts failed: {str(final_error)}")
-                # Continue with the original data, let the browser try to render it
+                logger.error(f"Critical error in image processing: {str(final_error)}")
+                # Create the simplest possible placeholder as a last resort
+                try:
+                    placeholder = Image.new('RGB', (400, 300), color=(200, 200, 200))
+                    draw = ImageDraw.Draw(placeholder)
+                    draw.text((20, 150), "Image processing failed", fill=(0, 0, 0))
+                    output = BytesIO()
+                    placeholder.save(output, format='JPEG')
+                    image_data = output.getvalue()
+                    logger.info("Created emergency placeholder image")
+                    return Response(
+                        content=image_data,
+                        media_type="image/jpeg",
+                        headers={"Content-Type": "image/jpeg", "Content-Length": str(len(image_data))}
+                    )
+                except Exception as placeholder_error:
+                    logger.error(f"Failed to create placeholder: {str(placeholder_error)}")
+                    raise HTTPException(status_code=400, detail="Could not process image data")
         
-        # Return the image
+        # Set proper headers for caching and content type
+        headers = {
+            "Cache-Control": "public, max-age=31536000",
+            "Content-Type": "image/jpeg",
+            "Content-Length": str(len(image_data))
+        }
+        
+        # Return the image with proper headers
         return Response(
             content=image_data,
-            media_type="image/jpeg"
+            media_type="image/jpeg",
+            headers=headers
         )
     except Exception as e:
         logger.error(f"Error processing image data: {str(e)}")

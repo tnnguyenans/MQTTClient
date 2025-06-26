@@ -319,39 +319,61 @@ function updateImageViewer(detection) {
             return false;
         }
         
+        // Add loading indicator first for all image types
+        const loadingIndicator = document.createElement('div');
+        loadingIndicator.className = 'loading-indicator';
+        loadingIndicator.textContent = 'Loading image...';
+        elements.imageViewer.appendChild(loadingIndicator);
+        
+        // Set image attributes for proper display
+        img.style.width = '100%';
+        img.style.height = 'auto';
+        img.style.display = 'block';
+        img.style.maxWidth = '100%';
+        img.setAttribute('crossorigin', 'anonymous'); // Handle CORS issues
+        
+        // Common image load success handler
+        const handleImageSuccess = () => {
+            console.log('Image loaded successfully');
+            // Remove loading indicator
+            if (loadingIndicator.parentNode) {
+                loadingIndicator.parentNode.removeChild(loadingIndicator);
+            }
+            // Ensure the image container adjusts to the image size
+            const imageViewer = document.getElementById('image-viewer');
+            imageViewer.style.height = 'auto';
+        };
+        
+        // Common image load error handler
+        const handleImageError = (message) => {
+            console.error(message);
+            // Create a more informative placeholder directly in the image viewer
+            elements.imageViewer.innerHTML = '';
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'image-error';
+            errorDiv.innerHTML = `
+                <div class="error-icon">❌</div>
+                <div class="error-message">Image failed to load</div>
+                <div class="error-details">${message}</div>
+                <div class="error-help">Try refreshing the page or selecting a different event</div>
+            `;
+            elements.imageViewer.appendChild(errorDiv);
+            
+            // Remove loading indicator
+            if (loadingIndicator.parentNode) {
+                loadingIndicator.parentNode.removeChild(loadingIndicator);
+            }
+        };
+        
         // Handle different image URL formats
         if (imageUrl.startsWith('data:')) {
             // For base64 images with proper data URI format, use directly
             img.src = imageUrl;
+            img.onload = handleImageSuccess;
+            img.onerror = () => handleImageError('Failed to load data URI image');
         } else if (imageUrl.startsWith('http')) {
-            // For external URLs, try direct access first
-            const filename = imageUrl.split('/').pop();
-            img.src = imageUrl;
-            
-            // If direct access fails, fall back to cached version
-            img.onerror = function() {
-                console.log('Direct URL access failed, trying cached version');
-                img.src = `/images/${filename}`;
-                
-                // If cached version fails, show placeholder
-                img.onerror = function() {
-                    console.error('Failed to load image from cache:', filename);
-                    showPlaceholderImage('Image failed to load');
-                };
-            };
-        } else if (isLikelyBase64(imageUrl)) {
-            // If it looks like a base64 string without the data URI prefix, use our image endpoint
-            console.log('Detected likely raw image data, using image endpoint');
-            
-            // Create a unique blob URL for this image as a placeholder while loading
-            const blobUrl = URL.createObjectURL(new Blob(['loading'], {type: 'text/plain'}));
-            img.src = blobUrl;
-            
-            // Add loading indicator
-            const loadingIndicator = document.createElement('div');
-            loadingIndicator.className = 'loading-indicator';
-            loadingIndicator.textContent = 'Loading image...';
-            elements.imageViewer.appendChild(loadingIndicator);
+            // For external URLs, always use our proxy endpoint for consistent handling
+            console.log('Processing HTTP URL through image endpoint');
             
             // Make a POST request to the image endpoint
             fetch('/api/image', {
@@ -368,59 +390,69 @@ function updateImageViewer(detection) {
                 return response.blob();
             })
             .then(blob => {
-                // Check if the blob is valid (non-empty)
-                if (blob.size === 0) {
-                    throw new Error('Empty image data received');
-                }
-                
                 // Create a URL for the blob and set it as the image source
-                const imageUrl = URL.createObjectURL(blob);
-                img.src = imageUrl;
-                img.style.width = '100%';
-                img.style.height = 'auto';
-                img.onload = function() {
-                    // Ensure the image container expands to fit the image
-                    const imageViewer = document.getElementById('image-viewer');
-                    imageViewer.style.height = 'auto';
-                };
-                console.log('Successfully loaded image from endpoint');
-                
-                // Remove loading indicator
-                if (loadingIndicator.parentNode) {
-                    loadingIndicator.parentNode.removeChild(loadingIndicator);
-                }
+                const blobUrl = URL.createObjectURL(blob);
+                img.src = blobUrl;
+                img.onload = handleImageSuccess;
+                img.onerror = () => handleImageError('Failed to load blob URL');
             })
             .catch(error => {
-                console.error('Error loading image:', error);
-                
+                console.error('Error processing HTTP URL:', error);
+                // Try direct URL as fallback
+                img.src = imageUrl;
+                img.onload = handleImageSuccess;
+                img.onerror = () => {
+                    // Try cached version as second fallback
+                    const filename = imageUrl.split('/').pop();
+                    console.log('Direct URL failed, trying cached version:', filename);
+                    img.src = `/images/${filename}`;
+                    img.onload = handleImageSuccess;
+                    img.onerror = () => handleImageError('Failed to load image from all sources');
+                };
+            });
+        } else if (isLikelyBase64(imageUrl) || imageUrl.length > 100) {
+            // If it looks like a base64 string or raw image data, use our image endpoint
+            console.log('Detected likely raw image data, using image endpoint');
+            
+            // Make a POST request to the image endpoint
+            fetch('/api/image', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ data: imageUrl })
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Image endpoint returned status ' + response.status);
+                }
+                return response.blob();
+            })
+            .then(blob => {
+                // Create a URL for the blob and set it as the image source
+                const blobUrl = URL.createObjectURL(blob);
+                img.src = blobUrl;
+                img.onload = handleImageSuccess;
+                img.onerror = () => handleImageError('Failed to load processed image');
+            })
+            .catch(error => {
+                console.error('Error processing image data:', error);
                 // Try with data URI as fallback
-                console.log('Image endpoint failed, trying with data URI prefix');
-                
-                // First try with direct base64 encoding
-                img.src = `data:image/jpeg;base64,${imageUrl}`;
-                
-                // If that fails, try with cleaned base64 string
-                img.onerror = function() {
-                    console.log('Direct data URI failed, trying with cleaned base64');
+                try {
                     // Clean the string to only include valid base64 characters
                     const cleanedData = imageUrl.replace(/[^A-Za-z0-9+/=]/g, '');
                     img.src = `data:image/jpeg;base64,${cleanedData}`;
-                    
-                    // If that also fails, show placeholder
-                    img.onerror = function() {
-                        console.error('All attempts to load image failed');
-                        showPlaceholderImage('Image failed to load');
-                    };
-                };
-                
-                // Remove loading indicator
-                if (loadingIndicator.parentNode) {
-                    loadingIndicator.parentNode.removeChild(loadingIndicator);
+                    img.onload = handleImageSuccess;
+                    img.onerror = () => handleImageError('Failed to load image from all sources');
+                } catch (e) {
+                    handleImageError('Failed to process image data');
                 }
             });
         } else {
-            // For relative paths or just filenames
+            // For unknown formats, try as a filename
             img.src = `/images/${imageUrl}`;
+            img.onload = handleImageSuccess;
+            img.onerror = () => handleImageError(`Failed to load image as filename: ${imageUrl}`);
         }
         
         img.alt = 'Detection Image';
