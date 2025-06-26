@@ -79,10 +79,27 @@ uv install
    ![image](https://github.com/user-attachments/assets/49755ff5-ca1d-4e5b-9976-a8c870dbbd1a)
 
 
-To run the MQTT client:
+### Running the MQTT Client
+
+To run the MQTT client in standalone mode:
 
 ```bash
-python -m src.mqtt_client.main
+python -m mqtt_client.main
+```
+
+
+### Running the Web Server
+
+To run the web server with the MQTT client integrated:
+
+```bash
+.\.venv\Scripts\python.exe -m mqtt_client.server
+```
+
+Once the server is running, you can access the web UI at:
+
+```
+http://localhost:8089
 ```
 
 ## Configuration
