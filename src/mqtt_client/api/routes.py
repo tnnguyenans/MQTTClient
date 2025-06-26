@@ -308,9 +308,61 @@ async def get_image(filename: str) -> FileResponse:
     
     # Check if this might be a base64 string (they sometimes get passed as filenames)
     if len(filename) > 100 and not filename.endswith(('.jpg', '.jpeg', '.png', '.gif')):
-        # Redirect to the base64 endpoint
-        logger.info(f"Redirecting potential base64 string to base64 endpoint")
-        return RedirectResponse(url=f"/base64/{filename}")
+        # Process as raw image data using our image endpoint
+        logger.info(f"Processing potential raw image data with image endpoint")
+        # Use our image processing function directly
+        try:
+            # Create a request model with the filename as data
+            request = ImageRequestModel(data=filename)
+            # Process the image data
+            return await get_image_data(request)
+        except Exception as e:
+            logger.error(f"Error processing raw image data: {str(e)}")
+            # Create a response with JavaScript that will POST to our image endpoint as fallback
+            html_content = f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Image Redirect</title>
+                <script>
+                document.addEventListener('DOMContentLoaded', function() {{
+                    // Get the image data from the URL
+                    const imageData = '{filename}';
+                    
+                    // Post to our image endpoint
+                    fetch('/api/image', {{
+                        method: 'POST',
+                        headers: {{
+                            'Content-Type': 'application/json',
+                        }},
+                        body: JSON.stringify({{ data: imageData }})
+                    }})
+                    .then(response => response.blob())
+                    .then(blob => {{
+                        // Create an object URL for the blob
+                        const url = URL.createObjectURL(blob);
+                        
+                        // Create an image element
+                        const img = document.createElement('img');
+                        img.src = url;
+                        img.style.maxWidth = '100%';
+                        
+                        // Add the image to the page
+                        document.body.appendChild(img);
+                    }})
+                    .catch(error => {{
+                        console.error('Error:', error);
+                        document.body.innerHTML = '<p>Error loading image</p>';
+                    }});
+                }});
+                </script>
+            </head>
+            <body>
+                <p>Loading image...</p>
+            </body>
+            </html>
+            """
+            return Response(content=html_content, media_type="text/html")
     
     # Get image path
     image_path = Path(config.image_processor.cache_dir) / filename
@@ -330,6 +382,24 @@ class ImageRequestModel(BaseModel):
     """Model for image request data."""
     data: str
 
+@router.get("/base64/{encoded_data:path}", summary="Legacy endpoint for base64 images")
+async def legacy_base64_image(encoded_data: str) -> Response:
+    """Legacy endpoint for base64 images.
+    
+    This endpoint handles requests to the old /base64/ path for backward compatibility.
+    
+    Args:
+        encoded_data: Base64 encoded image data from URL path.
+        
+    Returns:
+        Response: Image data as JPEG.
+    """
+    logger.info(f"Received request to legacy base64 endpoint with data length: {len(encoded_data) if encoded_data else 0} chars")
+    # Create a request model with the encoded data
+    request = ImageRequestModel(data=encoded_data)
+    # Process the image data using our main image processing function
+    return await get_image_data(request)
+
 @router.post("/api/image", summary="Get image from raw data or base64")
 async def get_image_data(request: ImageRequestModel) -> Response:
     """Process image data and return it.
@@ -338,7 +408,7 @@ async def get_image_data(request: ImageRequestModel) -> Response:
         request: Request model containing image data.
         
     Returns:
-        Response: Image data.
+        Response: Image data as JPEG.
         
     Raises:
         HTTPException: If data cannot be processed.
@@ -346,13 +416,19 @@ async def get_image_data(request: ImageRequestModel) -> Response:
     encoded_data = request.data
     logger.info(f"Received image request with data length: {len(encoded_data) if encoded_data else 0} chars")
     
+    if not encoded_data:
+        logger.error("No image data provided")
+        raise HTTPException(status_code=400, detail="No image data provided")
+    
     try:
-        # URL decode the string first (it may have been URL encoded)
+        # Import required modules
         import urllib.parse
         from io import BytesIO
         from PIL import Image
         import base64
+        import re
         
+        # URL decode the string first (it may have been URL encoded)
         decoded_data = urllib.parse.unquote(encoded_data)
         logger.debug(f"URL decoded data length: {len(decoded_data)}")
         
@@ -361,6 +437,9 @@ async def get_image_data(request: ImageRequestModel) -> Response:
             prefix = decoded_data[:20]
             suffix = decoded_data[-20:]
             logger.debug(f"Data prefix: {prefix}... suffix: ...{suffix}")
+        
+        # Initialize image_data variable
+        image_data = None
         
         # Check if this is a data URI format
         if decoded_data.startswith('data:'):
@@ -384,8 +463,26 @@ async def get_image_data(request: ImageRequestModel) -> Response:
                 # Raw data in URI
                 logger.info("Data URI contains raw data")
                 image_data = data_part.encode('latin1')  # Use latin1 to preserve byte values
-        else:
-            # Assume it's raw JPEG data
+        
+        # Check if it's already base64 encoded (without data URI prefix)
+        elif re.match(r'^[A-Za-z0-9+/]+={0,2}$', decoded_data):
+            logger.info("Detected base64 encoded data without URI prefix")
+            try:
+                # Try to decode as base64
+                # Add padding if needed
+                padding_needed = len(decoded_data) % 4
+                if padding_needed:
+                    decoded_data += '=' * (4 - padding_needed)
+                
+                image_data = base64.b64decode(decoded_data)
+                logger.info(f"Successfully decoded base64 data to {len(image_data)} bytes")
+            except Exception as b64_error:
+                logger.error(f"Failed to decode as base64: {str(b64_error)}")
+                # Continue to next approach
+                image_data = None
+        
+        # If not base64, assume it's raw JPEG data
+        if image_data is None:
             logger.info("Processing as raw JPEG string data")
             try:
                 # Convert string to bytes using latin1 encoding to preserve byte values
@@ -399,9 +496,36 @@ async def get_image_data(request: ImageRequestModel) -> Response:
         try:
             img = Image.open(BytesIO(image_data))
             logger.info(f"Validated image: {img.format}, size: {img.size}, mode: {img.mode}")
+            
+            # Convert to JPEG if it's not already
+            if img.format != 'JPEG':
+                logger.info(f"Converting {img.format} to JPEG")
+                output = BytesIO()
+                if img.mode != 'RGB':
+                    img = img.convert('RGB')
+                img.save(output, format='JPEG', quality=95)
+                image_data = output.getvalue()
+                logger.info(f"Converted to JPEG: {len(image_data)} bytes")
         except Exception as img_error:
             logger.error(f"Invalid image data: {str(img_error)}")
-            # Continue with the original data, let the browser try to render it
+            # Try one more approach - clean the data and try base64 decoding
+            try:
+                # Clean the string to only include valid base64 characters
+                cleaned_data = re.sub(r'[^A-Za-z0-9+/=]', '', decoded_data)
+                # Add padding if needed
+                padding_needed = len(cleaned_data) % 4
+                if padding_needed:
+                    cleaned_data += '=' * (4 - padding_needed)
+                    
+                image_data = base64.b64decode(cleaned_data)
+                logger.info(f"Decoded after cleaning: {len(image_data)} bytes")
+                
+                # Verify it's a valid image
+                img = Image.open(BytesIO(image_data))
+                logger.info(f"Validated cleaned image: {img.format}, size: {img.size}")
+            except Exception as final_error:
+                logger.error(f"All image processing attempts failed: {str(final_error)}")
+                # Continue with the original data, let the browser try to render it
         
         # Return the image
         return Response(
@@ -415,6 +539,7 @@ async def get_image_data(request: ImageRequestModel) -> Response:
             sample = encoded_data[:min(100, len(encoded_data))]
             logger.error(f"Sample of problematic data: {sample}...")
         raise HTTPException(status_code=400, detail=f"Could not process image data: {str(e)}")
+
 
 
 @router.websocket("/ws")

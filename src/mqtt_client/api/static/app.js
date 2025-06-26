@@ -343,9 +343,15 @@ function updateImageViewer(detection) {
             // If it looks like a base64 string without the data URI prefix, use our image endpoint
             console.log('Detected likely raw image data, using image endpoint');
             
-            // Create a unique blob URL for this image
+            // Create a unique blob URL for this image as a placeholder while loading
             const blobUrl = URL.createObjectURL(new Blob(['loading'], {type: 'text/plain'}));
             img.src = blobUrl;
+            
+            // Add loading indicator
+            const loadingIndicator = document.createElement('div');
+            loadingIndicator.className = 'loading-indicator';
+            loadingIndicator.textContent = 'Loading image...';
+            elements.imageViewer.appendChild(loadingIndicator);
             
             // Make a POST request to the image endpoint
             fetch('/api/image', {
@@ -362,22 +368,55 @@ function updateImageViewer(detection) {
                 return response.blob();
             })
             .then(blob => {
+                // Check if the blob is valid (non-empty)
+                if (blob.size === 0) {
+                    throw new Error('Empty image data received');
+                }
+                
                 // Create a URL for the blob and set it as the image source
                 const imageUrl = URL.createObjectURL(blob);
                 img.src = imageUrl;
+                img.style.width = '100%';
+                img.style.height = 'auto';
+                img.onload = function() {
+                    // Ensure the image container expands to fit the image
+                    const imageViewer = document.getElementById('image-viewer');
+                    imageViewer.style.height = 'auto';
+                };
                 console.log('Successfully loaded image from endpoint');
+                
+                // Remove loading indicator
+                if (loadingIndicator.parentNode) {
+                    loadingIndicator.parentNode.removeChild(loadingIndicator);
+                }
             })
             .catch(error => {
                 console.error('Error loading image:', error);
+                
                 // Try with data URI as fallback
                 console.log('Image endpoint failed, trying with data URI prefix');
+                
+                // First try with direct base64 encoding
                 img.src = `data:image/jpeg;base64,${imageUrl}`;
                 
-                // If that also fails, show placeholder
+                // If that fails, try with cleaned base64 string
                 img.onerror = function() {
-                    console.error('Failed to load image');
-                    showPlaceholderImage('Image failed to load');
+                    console.log('Direct data URI failed, trying with cleaned base64');
+                    // Clean the string to only include valid base64 characters
+                    const cleanedData = imageUrl.replace(/[^A-Za-z0-9+/=]/g, '');
+                    img.src = `data:image/jpeg;base64,${cleanedData}`;
+                    
+                    // If that also fails, show placeholder
+                    img.onerror = function() {
+                        console.error('All attempts to load image failed');
+                        showPlaceholderImage('Image failed to load');
+                    };
                 };
+                
+                // Remove loading indicator
+                if (loadingIndicator.parentNode) {
+                    loadingIndicator.parentNode.removeChild(loadingIndicator);
+                }
             });
         } else {
             // For relative paths or just filenames
