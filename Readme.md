@@ -5,13 +5,17 @@ A Python-based MQTT client application that subscribes to a Mosquitto MQTT broke
 ## Features
 
 - [x] **Project Setup and MQTT Client**: Basic MQTT client that connects to Mosquitto broker and subscribes to specified topic
+  - [x] **Graceful Shutdown**: Fixed issues with client exit to ensure proper resource cleanup
+  - [x] **Robust Message Parsing**: Enhanced error handling for ALPR bounding box data with case-insensitive attribute access
 - [x] **Data Models and Validation**: Pydantic models for object detection data
+  - [x] **Flexible Data Models**: Updated BoundingBoxModel to support both uppercase and lowercase attribute names
 - [x] **Image Download and Processing**: Download and process images from URLs and base64 strings with caching
 - [x] **LLM Integration**: Analyze images using LLM to extract additional attributes (colors, actions, descriptions)
 - [x] **Producer/Consumer Pattern**: Implement async processing queue system with MQTT, image, LLM, and UI stages
-- [ ] **Database Layer**: Store detection history in SQLite
+  - [x] **Improved Concurrency**: Enhanced async task management for reliable operation
 - [ ] **FastAPI Backend**: Create API endpoints and WebSocket connections
 - [ ] **Web UI**: Display real-time detection data and images
+- [ ] **Database Layer**: Store detection history in SQLite
 - [ ] **Configuration and Deployment**: Add comprehensive configuration management
 
 ## Setup

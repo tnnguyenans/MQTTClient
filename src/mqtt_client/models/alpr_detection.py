@@ -13,19 +13,48 @@ class ModelClassIDModel(BaseModel):
 
 
 class ModelClassNameModel(BaseModel):
-    """Model and class names."""
-    
+    """Model and class names."""    
     Model: str = Field(..., description="Model name")
     Class: str = Field(..., description="Class name")
 
 
 class BoundingBoxModel(BaseModel):
-    """Bounding box coordinates for detected objects."""
+    """Bounding box coordinates for detected objects.
     
-    Left: int = Field(..., description="Left coordinate")
-    Top: int = Field(..., description="Top coordinate")
-    Right: int = Field(..., description="Right coordinate")
-    Bottom: int = Field(..., description="Bottom coordinate")
+    Supports both uppercase (Left, Top, Right, Bottom) and
+    lowercase (left, top, right, bottom) attribute names.
+    """
+    
+    Left: int = Field(0, description="Left coordinate")
+    Top: int = Field(0, description="Top coordinate")
+    Right: int = Field(0, description="Right coordinate")
+    Bottom: int = Field(0, description="Bottom coordinate")
+    
+    # Allow field aliases for lowercase variants
+    class Config:
+        allow_population_by_field_name = True
+        fields = {
+            'Left': {'alias': 'left'},
+            'Top': {'alias': 'top'},
+            'Right': {'alias': 'right'},
+            'Bottom': {'alias': 'bottom'}
+        }
+        
+    @validator('*', pre=True)
+    def ensure_coordinates(cls, v, values, **kwargs):
+        """Ensure coordinates are valid integers."""
+        if v is None:
+            return 0
+        return v
+
+
+class UserInfoModel(BaseModel):
+    """User information."""
+    
+    UserID: str = Field(default="", description="User identifier")
+    UserName: str = Field(default="", description="User name")
+    GroupIDs: List[Any] = Field(default_factory=list, description="Group identifiers")
+    GroupNames: List[str] = Field(default_factory=list, description="Group names")
 
 
 class DetectionItemModel(BaseModel):
@@ -39,15 +68,6 @@ class DetectionItemModel(BaseModel):
     ModelClassName: ModelClassNameModel = Field(..., description="Model and class names")
     ExtraInformation: str = Field(default="", description="Additional information")
     Attributes: List[Any] = Field(default_factory=list, description="Detection attributes")
-
-
-class UserInfoModel(BaseModel):
-    """User information."""
-    
-    UserID: str = Field(default="", description="User identifier")
-    UserName: str = Field(default="", description="User name")
-    GroupIDs: List[Any] = Field(default_factory=list, description="Group identifiers")
-    GroupNames: List[str] = Field(default_factory=list, description="Group names")
 
 
 class DetectionDataModel(BaseModel):

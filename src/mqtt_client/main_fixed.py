@@ -192,6 +192,9 @@ async def process_detection_images(data: Union[DetectionData, ALPREventData]) ->
         logger.error(f"Error processing images: {e}")
 
 
+# Global flag to prevent multiple shutdown attempts
+is_shutting_down = False
+
 def handle_exit(signum, frame) -> None:
     """Handle exit signals.
     
@@ -199,6 +202,14 @@ def handle_exit(signum, frame) -> None:
         signum: Signal number.
         frame: Current stack frame.
     """
+    global is_shutting_down
+    
+    # Prevent multiple shutdown attempts
+    if is_shutting_down:
+        logger.info("Already shutting down, please wait...")
+        return
+        
+    is_shutting_down = True
     logger.info("Received exit signal, shutting down...")
     
     # Create event loop for cleanup
@@ -225,10 +236,14 @@ def handle_exit(signum, frame) -> None:
     
     # Run cleanup
     if loop.is_running():
-        loop.create_task(cleanup())
+        # Create a task and ensure it completes
+        cleanup_task = loop.create_task(cleanup())
+        # Force a short sleep to allow the task to complete
+        loop.run_until_complete(asyncio.sleep(0.5))
     else:
         loop.run_until_complete(cleanup())
     
+    # Force exit after cleanup
     sys.exit(0)
 
 
@@ -259,6 +274,9 @@ async def async_main() -> None:
     """Run the MQTT client application asynchronously."""
     global mqtt_client
     
+    # Create an event to signal shutdown
+    shutdown_event = asyncio.Event()
+    
     try:
         # Load configuration
         config = load_config()
@@ -277,8 +295,13 @@ async def async_main() -> None:
         logger.info("MQTT client started. Press Ctrl+C to exit.")
         
         # Keep the main task alive
-        while True:
-            await asyncio.sleep(1)
+        # Wait for shutdown event with a timeout to allow for keyboard interrupts
+        while not shutdown_event.is_set():
+            try:
+                await asyncio.wait_for(shutdown_event.wait(), timeout=1)
+            except asyncio.TimeoutError:
+                # This is expected, just continue the loop
+                pass
             
     except asyncio.CancelledError:
         logger.info("Main task cancelled")
@@ -299,6 +322,10 @@ async def async_main() -> None:
 
 def main() -> None:
     """Run the MQTT client application."""
+    # Create a flag to track if we're shutting down
+    global is_shutting_down
+    is_shutting_down = False
+    
     # Register signal handlers
     signal.signal(signal.SIGINT, handle_exit)
     signal.signal(signal.SIGTERM, handle_exit)

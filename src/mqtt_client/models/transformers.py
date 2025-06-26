@@ -51,15 +51,30 @@ def extract_bounding_boxes(
                     bbox = detection.BoundingBox
                     
                     # Convert bounding box to the format expected by the analyzer
+                    # Handle different possible attribute naming conventions (case sensitivity)
+                    left = getattr(bbox, 'Left', getattr(bbox, 'left', None))
+                    top = getattr(bbox, 'Top', getattr(bbox, 'top', None))
+                    right = getattr(bbox, 'Right', getattr(bbox, 'right', None))
+                    bottom = getattr(bbox, 'Bottom', getattr(bbox, 'bottom', None))
+                    
+                    # Log warning if any coordinates are missing
+                    if any(coord is None for coord in [left, top, right, bottom]):
+                        logger.warning(f"Incomplete bounding box data for {detection_data.Name}: {bbox}")
+                        # Use default values if coordinates are missing
+                        left = left if left is not None else 0
+                        top = top if top is not None else 0
+                        right = right if right is not None else 0
+                        bottom = bottom if bottom is not None else 0
+                    
                     box_info = {
                         'license_plate': detection_data.Name,
                         'confidence': detection.Score,
                         'timestamp': detection.Time,
                         'bounding_box': {
-                            'x': bbox.Left,
-                            'y': bbox.Top,
-                            'width': bbox.Right - bbox.Left,
-                            'height': bbox.Bottom - bbox.Top
+                            'x': left,
+                            'y': top,
+                            'width': right - left,
+                            'height': bottom - top
                         },
                         'camera_id': detection_data.CameraID,
                         'camera_name': detection_data.CameraName
